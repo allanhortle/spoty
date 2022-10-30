@@ -1,0 +1,23 @@
+{
+  "name": "raindrop",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:allanhortle/raindrop-tui.git",
+  "author": "Allan Hortle <allanhortle@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "ink": "^3.2.0",
+    "react": "^18.2.0",
+    "spotify-web-api-node": "^5.0.2",
+    "typescript": "^4.8.4",
+    "yargs": "^17.6.0",
+    "zustand": "3.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.7",
+    "@types/react": "^18.0.24",
+    "@types/spotify-web-api-node": "^5.0.7",
+    "prettier": "^2.7.1"
+  }
+}
