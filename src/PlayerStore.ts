@@ -1,21 +1,9 @@
 import SpotifyWebApi from 'spotify-web-api-node';
-import create from 'zustand';
+import {proxy} from 'valtio';
 
 const api = new SpotifyWebApi();
 if (!process.env.SPOTIFY_TOKEN) throw new Error('SPOTIFY_TOKEN not found');
 api.setAccessToken(process.env.SPOTIFY_TOKEN);
-
-type PlayerStore = {
-    playing: boolean;
-    track: string;
-    artist: string;
-    album: string;
-    progress: string;
-    duration: string;
-    progressDecimal: number;
-    playPause: () => Promise<void>;
-    pollCurrentlyPlaying: () => Promise<void>;
-};
 
 function timeToString(ms: number) {
     const min = Math.floor((ms / 1000 / 60) << 0);
@@ -23,7 +11,7 @@ function timeToString(ms: number) {
     return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 }
 
-export default create<PlayerStore>((set) => ({
+const player = proxy({
     playing: false,
     track: '',
     artist: '',
@@ -36,21 +24,18 @@ export default create<PlayerStore>((set) => ({
         const {progress_ms, item} = body;
         const duration = item?.duration_ms || 0;
         const progress = progress_ms || 0;
-        console.log(body);
-        set({
-            playing: body.is_playing,
-            progress: timeToString(progress),
-            progressDecimal: progress / duration,
-            duration: timeToString(duration)
-        });
+
+        player.playing = body.is_playing;
+        player.progress = timeToString(progress);
+        player.progressDecimal = progress / duration;
+        player.duration = timeToString(duration);
         if (body?.item) {
             if (body.item.type === 'track') {
                 const {album, artists, name} = body.item;
-                set({
-                    track: name,
-                    artist: artists.map((ii) => ii.name).join(', '),
-                    album: album.name
-                });
+                player.track = name;
+                player.artist = artists.map((ii) => ii.name).join(', ');
+                player.album = album.name;
+                return player;
             } else {
                 throw new Error(`${body.item.type} not accounted for`);
             }
@@ -75,4 +60,6 @@ export default create<PlayerStore>((set) => ({
             return;
         }
     }
-}));
+});
+
+export default player;

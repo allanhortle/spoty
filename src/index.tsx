@@ -1,17 +1,19 @@
-import {Component, useState, useEffect} from 'react';
+import {Component, Suspense, useState} from 'react';
 import {render, Box, Text, useApp, useInput} from 'ink';
 import Screen from './util/Screen';
 import PlayerStore from './PlayerStore';
 import Player from './affordance/Player';
 import useScreenSize from './util/useScreenSize';
+import TextInput from 'ink-text-input';
 
 class App extends Component {
     render() {
-        //return <Counter />;
         return (
-            <Screen>
-                <Counter />
-            </Screen>
+            <Suspense>
+                <Screen>
+                    <Counter />
+                </Screen>
+            </Suspense>
         );
     }
 }
@@ -19,30 +21,38 @@ class App extends Component {
 function Counter() {
     const {exit} = useApp();
     const {width, height} = useScreenSize();
+    const [query, setQuery] = useState('');
+    const [search, setSearch] = useState(false);
 
     useInput((input, key) => {
-        if (input === 'q' || key.escape) {
+        if (input === 'q') {
             exit();
         }
-        if (input === 'p') PlayerStore.getState().playPause();
+        if (input === 'p') PlayerStore.playPause();
+        if (input === '/') setSearch(!search);
+        if (search && key.escape) setSearch(false);
     });
 
     return (
         <Box flexDirection="column" height={height}>
-            <Box flexGrow={1}>
-                <Text>Foo</Text>
-            </Box>
+            {search && (
+                <Box flexDirection="column">
+                    <Box>
+                        <Text>Search: </Text>
+                        <TextInput value={query} onChange={setQuery} />
+                    </Box>
+                    <Text wrap="truncate">{'▁'.repeat(width)}</Text>
+                </Box>
+            )}
+            <Box flexGrow={1}></Box>
             <Text wrap="truncate">{'▔'.repeat(width)}</Text>
             <Player />
         </Box>
     );
 }
 
-//const enterAltScreenCommand = '\x1b[?1049h';
-//const leaveAltScreenCommand = '\x1b[?1049l';
-//process.stdout.write(enterAltScreenCommand);
-//process.on('exit', () => {
-//process.stdout.write(leaveAltScreenCommand);
-//});
-
-render(<App />, {patchConsole: false});
+try {
+    render(<App />, {patchConsole: false});
+} catch (e) {
+    console.log(e);
+}
