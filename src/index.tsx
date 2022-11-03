@@ -1,47 +1,74 @@
-import {Component, Suspense, useState} from 'react';
-import {render, Box, Text, useApp, useInput} from 'ink';
+import {Component, Suspense, useEffect} from 'react';
+import {render, Box, Text, useApp, useInput, Key} from 'ink';
 import Screen from './util/Screen';
-import PlayerStore from './PlayerStore';
-import Player from './affordance/Player';
+import Player, {PlayerStore} from './view/Player';
+import Search, {SearchStore} from './view/Search';
+import Devices, {DeviceStore} from './view/Devices';
 import useScreenSize from './util/useScreenSize';
-import TextInput from 'ink-text-input';
+import logger from './util/logger';
+import {proxy, useSnapshot} from 'valtio';
 
-class App extends Component {
-    render() {
-        return (
-            <Suspense>
-                <Screen>
-                    <Counter />
-                </Screen>
-            </Suspense>
-        );
+DeviceStore.fetchDevices();
+
+const viewManager = proxy({
+    search: false,
+    devices: false,
+    view: null,
+
+    useInput(input: string, key: Key) {
+        if (input === 'p') PlayerStore.playPause();
+        if (input === '/') {
+            this.devices = false;
+            this.search = true;
+            SearchStore.reset();
+        }
+        if (input === 'd' && !this.search) {
+            this.search = false;
+            this.devices = !this.devices;
+            DeviceStore.reset();
+        }
+
+        if (this.search) {
+            if (key.escape) this.search = false;
+            return SearchStore.useInput(input, key);
+        }
+        if (this.devices) {
+            if (key.escape) this.devices = false;
+            return DeviceStore.useInput(input, key);
+        }
     }
-}
+});
 
-function Counter() {
+function SpotifyPlayer() {
     const {exit} = useApp();
     const {width, height} = useScreenSize();
-    const [query, setQuery] = useState('');
-    const [search, setSearch] = useState(false);
+    const snap = useSnapshot(viewManager);
 
     useInput((input, key) => {
-        if (input === 'q') {
-            exit();
-        }
-        if (input === 'p') PlayerStore.playPause();
-        if (input === '/') setSearch(!search);
-        if (search && key.escape) setSearch(false);
+        if (input === 'q') exit();
+        viewManager.useInput(input, key);
     });
+
+    useEffect(() => {
+        PlayerStore.pollCurrentlyPlaying();
+        const timer = setInterval(() => {
+            PlayerStore.pollCurrentlyPlaying();
+        }, 500);
+
+        return () => {
+            clearInterval(timer);
+        };
+    }, []);
 
     return (
         <Box flexDirection="column" height={height}>
-            {search && (
+            {(snap.devices || snap.search) && (
                 <Box flexDirection="column">
-                    <Box>
-                        <Text>Search: </Text>
-                        <TextInput value={query} onChange={setQuery} />
+                    <Box flexDirection="column" paddingX={1}>
+                        {snap.devices && <Devices />}
+                        {snap.search && <Search />}
                     </Box>
-                    <Text wrap="truncate">{'▁'.repeat(width)}</Text>
+                    <Text wrap="truncate">{'▄'.repeat(width)}</Text>
                 </Box>
             )}
             <Box flexGrow={1}></Box>
@@ -51,8 +78,23 @@ function Counter() {
     );
 }
 
+class App extends Component {
+    componentDidCatch(e: Error) {
+        logger.error(e);
+    }
+    render() {
+        return (
+            <Suspense>
+                <Screen>
+                    <SpotifyPlayer />
+                </Screen>
+            </Suspense>
+        );
+    }
+}
+
 try {
     render(<App />, {patchConsole: false});
 } catch (e) {
-    console.log(e);
+    logger.error(e);
 }
