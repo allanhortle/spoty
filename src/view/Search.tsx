@@ -1,15 +1,14 @@
 import {Box, Text, Key} from 'ink';
-import {useState} from 'react';
 import {useSnapshot} from 'valtio';
 import TextInput from 'ink-text-input';
-import {PlayerStore} from './Player';
 import {proxy} from 'valtio';
 import spotify from '../util/spotify';
 import logger from '../util/logger';
+import {Router} from '../index';
 
 export const SearchStore = proxy({
     items: new Array<{name: string; type: string; uri: string; artist: string}>(),
-    type: 'album' as 'album' | 'artist',
+    type: 'artist' as 'album' | 'artist',
     selected: 0,
     query: '',
     async search(query: string) {
@@ -49,11 +48,14 @@ export const SearchStore = proxy({
         }
         if (key.tab) {
             this.type = this.type === 'album' ? 'artist' : 'album';
+            this.query = '';
+            this.items = [];
         }
         if (key.return) {
-            logger.info('return', this.query);
             if (this.items.length) {
-                PlayerStore.play(this.items[this.selected].uri);
+                logger.info(this.items[this.selected]);
+                const uri = this.items[this.selected].uri;
+                Router.push(uri);
                 SearchStore.reset();
             } else {
                 return SearchStore.search(this.query);
@@ -64,12 +66,11 @@ export const SearchStore = proxy({
 
 export default function Search() {
     const snap = useSnapshot(SearchStore);
-    //const [search, setSearch] = useState(false);
 
     return (
         <>
             <Box justifyContent="space-between">
-                <Box>
+                <Box marginBottom={1}>
                     <Text bold>Search: </Text>
                     <TextInput
                         value={snap.query}
@@ -83,14 +84,16 @@ export default function Search() {
                     <Text color={snap.type === 'artist' ? 'yellow' : undefined}>artist</Text>
                 </Box>
             </Box>
-            {snap.items.map((ii, index) => (
-                <Box key={ii.uri}>
-                    <Text>
-                        {index === snap.selected ? '> ' : '  '}
-                        {ii.name} - {ii.artist}
-                    </Text>
-                </Box>
-            ))}
+            {snap.items.map((ii, index) => {
+                return (
+                    <Box key={index}>
+                        <Text>{index === snap.selected ? '> ' : '  '}</Text>
+                        <Text wrap="truncate">
+                            {snap.type === 'album' ? `${ii.name} - ${ii.artist}` : ii.name}
+                        </Text>
+                    </Box>
+                );
+            })}
         </>
     );
 }

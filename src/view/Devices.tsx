@@ -2,6 +2,7 @@ import {Box, Text, Key} from 'ink';
 import {proxy, useSnapshot} from 'valtio';
 import logger from '../util/logger';
 import spotify from '../util/spotify';
+import {Router} from '../index';
 
 type Device = {id: string | null; is_active: boolean; name: string; volume: number};
 
@@ -50,6 +51,7 @@ export const DeviceStore = proxy({
                 .transferMyPlayback([device.id])
                 .then(() => this.fetchDevices())
                 .catch(logger.error);
+            Router.pop();
             return;
         }
     }
@@ -60,7 +62,9 @@ export default function DeviceMenu() {
 
     return (
         <>
-            <Text bold>Devices</Text>
+            <Box marginBottom={1}>
+                <Text bold>Devices</Text>
+            </Box>
             {snap.devices.map((ii, index) => (
                 <Box key={ii.id}>
                     <Text>{index === snap.selected ? '> ' : '  '}</Text>

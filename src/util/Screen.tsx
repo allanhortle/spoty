@@ -1,7 +1,7 @@
 import {useEffect, useMemo} from 'react';
 import {Box, useStdout, useInput} from 'ink';
 
-import useScreenSize from './useScreenSize.js';
+import useScreenSize from './useScreenSize';
 
 const Screen = ({children}: {children?: any}) => {
     const {height, width} = useScreenSize();

@@ -7,8 +7,10 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
+    "@types/spotify-api": "^0.0.19",
     "ink": "^3.2.0",
     "ink-text-input": "^4.0.3",
+    "lodash": "^4.17.21",
     "react": "17.x.x",
     "spotify-web-api-node": "^5.0.2",
     "typescript": "^4.8.4",
@@ -17,6 +19,7 @@
     "yargs": "^17.6.0"
   },
   "devDependencies": {
+    "@types/lodash": "^4.14.188",
     "@types/node": "^18.11.7",
     "@types/react": "^18.0.24",
     "@types/spotify-web-api-node": "^5.0.7",

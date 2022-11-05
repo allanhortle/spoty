@@ -2,45 +2,50 @@ import {Box, Text} from 'ink';
 import useScreenSize from '../util/useScreenSize';
 import {useSnapshot} from 'valtio';
 import {DeviceStore} from './Devices';
-import spotify from '../util/spotify';
+import spotify, {PlayOptions} from '../util/spotify';
 import logger from '../util/logger';
+import timeToString from '../util/timeToString';
 import {proxy} from 'valtio';
-
-function timeToString(ms: number) {
-    const min = Math.floor((ms / 1000 / 60) << 0);
-    const sec = Math.floor((ms / 1000) % 60);
-    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-}
 
 export const PlayerStore = proxy({
     playing: false,
     track: '',
     artist: '',
     album: '',
+    id: null,
     foo: 23,
     progress: '00:00',
     progressDecimal: 0,
     duration: '00:00',
+    shouldPoll: true,
     async pollCurrentlyPlaying() {
-        const {body} = await spotify.getMyCurrentPlayingTrack();
-        const {progress_ms, item} = body;
-        const duration = item?.duration_ms || 0;
-        const progress = progress_ms || 0;
+        if (!this.shouldPoll) return;
+        try {
+            const {body} = await spotify.getMyCurrentPlayingTrack();
+            const {progress_ms, item} = body;
+            const duration = item?.duration_ms || 0;
+            const progress = progress_ms || 0;
 
-        this.playing = body.is_playing;
-        this.progress = timeToString(progress);
-        this.progressDecimal = progress / duration;
-        this.duration = timeToString(duration);
+            this.playing = body.is_playing;
+            this.progress = timeToString(progress);
+            this.progressDecimal = progress / duration;
+            this.duration = timeToString(duration);
 
-        if (body?.item) {
-            if (body.item.type === 'track') {
-                const {album, artists, name} = body.item;
-                this.track = name;
-                this.artist = artists.map((ii) => ii.name).join(', ');
-                this.album = album.name;
-            } else {
-                throw new Error(`${body.item.type} not accounted for`);
+            if (body?.item) {
+                if (body.item.type === 'track') {
+                    const {album, artists, name} = body.item;
+                    this.track = name;
+                    this.id = body.item.id;
+                    this.artist = artists.map((ii) => ii.name).join(', ');
+                    this.album = album.name;
+                } else {
+                    throw new Error(`${body.item.type} not accounted for`);
+                }
             }
+        } catch (e) {
+            this.shouldPoll = false;
+            logger.info('polling error');
+            logger.error(e);
         }
     },
     async playPause() {
@@ -55,10 +60,11 @@ export const PlayerStore = proxy({
             return;
         }
     },
-    play(context_uri: string) {
+    play(context_uri: string, options: Parameters<typeof spotify.play>[0]) {
+        logger.info({context_uri});
         const device_id = DeviceStore.activeDevice?.id;
         if (!device_id) return logger.error('cant play, no device_id', {context_uri});
-        spotify.play({device_id, context_uri}).catch(logger.error);
+        spotify.play({device_id, context_uri, ...options}).catch(logger.error);
     }
 });
 
@@ -76,7 +82,7 @@ export default function Player() {
         <Box flexDirection="column" paddingX={1} paddingBottom={1}>
             <Box justifyContent="space-between">
                 <Text>
-                    {snap.track} - {snap.artist} - {snap.album}
+                    {snap.track} - {snap.album} - {snap.artist}
                 </Text>
                 <Text>
                     d={device?.name ?? '?'} v={device?.volume || 0}%
