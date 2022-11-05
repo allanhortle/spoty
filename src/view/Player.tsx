@@ -2,7 +2,7 @@ import {Box, Text} from 'ink';
 import useScreenSize from '../util/useScreenSize';
 import {useSnapshot} from 'valtio';
 import {DeviceStore} from './Devices';
-import spotify, {PlayOptions} from '../util/spotify';
+import spotify from '../util/spotify';
 import logger from '../util/logger';
 import timeToString from '../util/timeToString';
 import {proxy} from 'valtio';
@@ -12,7 +12,7 @@ export const PlayerStore = proxy({
     track: '',
     artist: '',
     album: '',
-    id: null,
+    id: '',
     foo: 23,
     progress: '00:00',
     progressDecimal: 0,

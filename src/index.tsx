@@ -10,8 +10,6 @@ import useScreenSize from './util/useScreenSize';
 import logger from './util/logger';
 import {proxy, useSnapshot} from 'valtio';
 
-DeviceStore.fetchDevices();
-
 export const Router = proxy({
     route: [] as string[],
     exit: () => {},
@@ -60,8 +58,6 @@ export const Router = proxy({
         if (route === 'devices') return DeviceStore.useInput(input, key);
     }
 });
-
-Router.mount(Router.route.at(-1) || 'home');
 
 function SpotifyPlayer() {
     const {exit} = useApp();
@@ -120,6 +116,8 @@ class App extends Component {
 
 try {
     render(<App />);
+    DeviceStore.mount();
+    Router.mount(Router.route.at(-1) || 'home');
 } catch (e) {
     logger.error(e);
 }
