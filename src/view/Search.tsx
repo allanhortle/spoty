@@ -11,6 +11,7 @@ export const SearchStore = proxy({
     type: 'artist' as 'album' | 'artist',
     selected: 0,
     query: '',
+    focus: false,
     async search(query: string) {
         const {body} = await spotify.search(query, [this.type], {limit: 20});
         const albums = (body.albums?.items || []).map(({name, type, uri, artists}) => ({
@@ -34,31 +35,36 @@ export const SearchStore = proxy({
     prev() {
         this.selected = Math.max(0, this.selected - 1);
     },
-    reset() {
+    mount() {
         this.selected = 0;
         this.items = [];
         this.query = '';
+        this.focus = true;
     },
     useInput(input: string, key: Key) {
-        if (key.downArrow || input === 'j') {
-            return SearchStore.next();
-        }
-        if (key.upArrow || input === 'k') {
-            return SearchStore.prev();
-        }
         if (key.tab) {
             this.type = this.type === 'album' ? 'artist' : 'album';
             this.query = '';
             this.items = [];
         }
-        if (key.return) {
-            if (this.items.length) {
+        if (this.focus) {
+            if (key.return) {
+                this.focus = false;
+                return SearchStore.search(this.query);
+            }
+        } else {
+            if (key.downArrow || input === 'j') {
+                return SearchStore.next();
+            }
+            if (key.upArrow || input === 'k') {
+                return SearchStore.prev();
+            }
+            if (key.return && this.items.length) {
                 logger.info(this.items[this.selected]);
                 const uri = this.items[this.selected].uri;
                 Router.push(uri);
-                SearchStore.reset();
-            } else {
-                return SearchStore.search(this.query);
+                SearchStore.mount();
+                return;
             }
         }
     }

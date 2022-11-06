@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import {Component, Suspense, useEffect} from 'react';
 import {render, Box, Text, useApp, useInput, Key} from 'ink';
 import Screen from './util/Screen';
@@ -5,25 +7,27 @@ import Player, {PlayerStore} from './view/Player';
 import Search, {SearchStore} from './view/Search';
 import Artist, {ArtistStore} from './view/Artist';
 import Album, {AlbumStore} from './view/Album';
+import Home, {HomeStore} from './view/Home';
 import Devices, {DeviceStore} from './view/Devices';
 import useScreenSize from './util/useScreenSize';
 import logger from './util/logger';
 import {proxy, useSnapshot} from 'valtio';
+import spotify from './util/spotify';
 
 export const Router = proxy({
-    route: [] as string[],
+    route: ['home'] as string[],
     exit: () => {},
 
     push(route: string) {
         if (this.route.at(-1) !== route) {
-            this.route.push(route);
             this.mount(route);
+            this.route.push(route);
         }
     },
     replace(route: string) {
         if (this.route.at(-1) !== route) {
-            this.route[this.route.length - 1] = route;
             this.mount(route);
+            this.route[this.route.length - 1] = route;
         }
     },
     pop() {
@@ -31,31 +35,27 @@ export const Router = proxy({
         logger.info('pop', this.route);
     },
     mount(route: string) {
-        if (route.includes('artist')) {
-            ArtistStore.mount(route.split(':')[2]);
-        }
-        if (route.includes('album')) {
-            AlbumStore.mount(route.split(':')[2]);
-        }
+        if (route.includes('artist')) return ArtistStore.mount(route.split(':')[2]);
+        if (route.includes('album')) return AlbumStore.mount(route.split(':')[2]);
+        if (route === 'home') return HomeStore.mount();
+        if (route === 'search') return SearchStore.mount();
     },
     useInput(input: string, key: Key) {
         const route = this.route.at(-1) || '';
         if (key.escape) this.pop();
-        if (input === 'q') this.route.length ? this.pop() : this.exit();
-        if (input === 'p') PlayerStore.playPause();
-        if (input === '/') {
-            this.push('search');
-            SearchStore.reset();
-        }
-        if (input === 'd' && route !== 'search') {
-            this.push('devices');
-            DeviceStore.reset();
+        if (input === '/') this.push('search');
+        if (!SearchStore.focus) {
+            if (input === 'q') this.route.length > 1 ? this.pop() : this.exit();
+            if (input === 'p') PlayerStore.playPause();
+            if (input === 'h') this.route = ['home'];
+            if (input === 'd') this.push('devices');
         }
 
         if (route === 'search') return SearchStore.useInput(input, key);
         if (route.includes('artist')) return ArtistStore.useInput(input, key);
         if (route.includes('album')) return AlbumStore.useInput(input, key);
         if (route === 'devices') return DeviceStore.useInput(input, key);
+        return HomeStore.useInput(input, key);
     }
 });
 
@@ -69,17 +69,6 @@ function SpotifyPlayer() {
         Router.useInput(input, key);
     });
 
-    useEffect(() => {
-        PlayerStore.pollCurrentlyPlaying();
-        const timer = setInterval(() => {
-            PlayerStore.pollCurrentlyPlaying();
-        }, 500);
-
-        return () => {
-            clearInterval(timer);
-        };
-    }, []);
-
     return (
         <Box flexDirection="column">
             <Text wrap="truncate">{'▀'.repeat(width)}</Text>
@@ -90,7 +79,7 @@ function SpotifyPlayer() {
                     if (route === 'devices') return <Devices />;
                     if (route.startsWith('spotify:album')) return <Album />;
                     if (route.startsWith('spotify:artist')) return <Artist />;
-                    return <Text>Home</Text>;
+                    return <Home />;
                 })()}
             </Box>
             <Text wrap="truncate">{'▀'.repeat(width)}</Text>
@@ -114,10 +103,16 @@ class App extends Component {
     }
 }
 
-try {
-    render(<App />);
-    DeviceStore.mount();
-    Router.mount(Router.route.at(-1) || 'home');
-} catch (e) {
-    logger.error(e);
-}
+(async () => {
+    try {
+        render(<App />);
+        DeviceStore.mount();
+        //const {body} = await spotify.getMyCurrentPlaybackState();
+        //const album = body.item.album.uri;
+        //logger.info(album);
+        //Router.route = [album];
+        Router.mount(Router.route.at(-1) || 'home');
+    } catch (e) {
+        logger.error(e);
+    }
+})();

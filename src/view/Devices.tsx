@@ -24,18 +24,18 @@ export const DeviceStore = proxy({
             name: ii.name,
             volume: ii.volume_percent || 0
         }));
-        logger.info(devices.map(ii => `${ii.name}=${ii.is_active}`);
+        logger.info(devices.map((ii) => `${ii.name}=${ii.is_active}`));
         this.devices = devices;
         this.activeDevice = devices.find((ii) => ii.is_active) ?? null;
     },
     async mount() {
         await this.fetchDevices();
-        if(this.devices.length === 1) {
+        if (this.devices.length === 1) {
             this.activeDevice = this.devices[0];
         }
-    },
-    reset() {
-        this.fetchDevices().catch(logger.error);
+        if (this.activeDevice?.id) {
+            spotify.transferMyPlayback([this.activeDevice?.id]);
+        }
     },
     useInput(input: string, key: Key) {
         if (key.downArrow || input === 'j') {
@@ -52,9 +52,7 @@ export const DeviceStore = proxy({
         if (key.return && device?.id) {
             this.activeDevice = device;
             logger.info(`transfer to: ${device.name}`);
-            spotify
-                .transferMyPlayback([device.id])
-                .catch(logger.error);
+            spotify.transferMyPlayback([device.id]).catch(logger.error);
             Router.pop();
             return;
         }
@@ -72,7 +70,9 @@ export default function DeviceMenu() {
             {snap.devices.map((ii, index) => (
                 <Box key={ii.id}>
                     <Text>{index === snap.selected ? '> ' : '  '}</Text>
-                    <Text color={ii.id === snap.activeDevice?.id ? 'green' : undefined}>{ii.name}</Text>
+                    <Text color={ii.id === snap.activeDevice?.id ? 'green' : undefined}>
+                        {ii.name}
+                    </Text>
                 </Box>
             ))}
         </>

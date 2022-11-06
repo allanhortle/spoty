@@ -1,4 +1,5 @@
 import {Box, Text} from 'ink';
+import {useEffect} from 'react';
 import useScreenSize from '../util/useScreenSize';
 import {useSnapshot} from 'valtio';
 import {DeviceStore} from './Devices';
@@ -77,6 +78,16 @@ export default function Player() {
     const done = Math.round((safeWidth - 3) * snap.progressDecimal);
 
     const device = devicesSnap.activeDevice;
+    useEffect(() => {
+        PlayerStore.pollCurrentlyPlaying();
+        const timer = setInterval(() => {
+            PlayerStore.pollCurrentlyPlaying();
+        }, 500);
+
+        return () => {
+            clearInterval(timer);
+        };
+    }, []);
 
     return (
         <Box flexDirection="column" paddingX={1} paddingBottom={1}>
