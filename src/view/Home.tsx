@@ -1,11 +1,6 @@
-import {Box, Text, Key, Spacer} from 'ink';
+import {Box, Text, Key} from 'ink';
 import {proxy, useSnapshot} from 'valtio';
-import logger from '../util/logger';
 import spotify, {ArtistSimple} from '../util/spotify';
-import type {Track, Home} from '../util/spotify';
-import timeToString from '../util/timeToString';
-import {PlayerStore} from './Player';
-//import {Router} from '../index';
 
 export const HomeStore = proxy({
     selected: 0,
@@ -13,11 +8,11 @@ export const HomeStore = proxy({
     medium_term: [] as ArtistSimple[],
     long_term: [] as ArtistSimple[],
     next() {
-        this.selected = (this.selected + 1) % this.tracks.length;
+        this.selected = (this.selected + 1) % this.short_term.length;
     },
     prev() {
         const next = this.selected - 1;
-        this.selected = next === -1 ? this.tracks.length - 1 : next;
+        this.selected = next === -1 ? this.short_term.length - 1 : next;
     },
     async mount() {
         const {body: short_term} = await spotify.getMyTopArtists({time_range: 'short_term'});
@@ -30,18 +25,11 @@ export const HomeStore = proxy({
     useInput(input: string, key: Key) {
         if (key.downArrow || input === 'j') return this.next();
         if (key.upArrow || input === 'k') return this.prev();
-        //if (key.return && this.home) {
-        //PlayerStore.play(this.home.uri, {
-        //offset: {position: this.selected}
-        //});
-        //}
     }
 });
 
 export default function Home() {
     const snap = useSnapshot(HomeStore);
-    logger.info(snap.genres);
-
     if (!snap.short_term.length) return null;
 
     return (
