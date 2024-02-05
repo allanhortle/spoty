@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import {Component, Suspense, useEffect} from 'react';
+import {Component, Suspense} from 'react';
 import {render, Box, Text, useApp, useInput, Key} from 'ink';
 import Screen from './util/Screen';
 import Player, {PlayerStore} from './view/Player';
@@ -12,7 +12,7 @@ import Devices, {DeviceStore} from './view/Devices';
 import useScreenSize from './util/useScreenSize';
 import logger from './util/logger';
 import {proxy, useSnapshot} from 'valtio';
-import spotify from './util/spotify';
+import {initializeStorage} from './util/storage';
 
 export const Router = proxy({
     route: ['home'] as string[],
@@ -105,8 +105,10 @@ class App extends Component {
 
 (async () => {
     try {
+        await initializeStorage();
         render(<App />);
         DeviceStore.mount();
+
         //const {body} = await spotify.getMyCurrentPlaybackState();
         //const album = body.item.album.uri;
         //logger.info(album);
