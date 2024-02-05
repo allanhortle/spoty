@@ -9,9 +9,11 @@
   "private": true,
   "dependencies": {
     "@types/spotify-api": "^0.0.19",
+    "env-paths": "^2.0.0",
     "ink": "^3.2.0",
     "ink-text-input": "^4.0.3",
     "lodash": "^4.17.21",
+    "make-dir": "^3.1.0",
     "react": "17.x.x",
     "spotify-web-api-node": "^5.0.2",
     "typescript": "^4.8.4",
