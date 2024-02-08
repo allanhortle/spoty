@@ -7,16 +7,17 @@
   "author": "Allan Hortle <allanhortle@gmail.com>",
   "license": "MIT",
   "private": true,
+  "type": "module",
   "dependencies": {
-    "@types/spotify-api": "^0.0.19",
     "env-paths": "^2.0.0",
-    "ink": "^3.2.0",
-    "ink-text-input": "^4.0.3",
     "lodash": "^4.17.21",
     "make-dir": "^3.1.0",
-    "react": "17.x.x",
+    "react-curse": "^1.0.13",
+    "react-dom": "^18.2.0",
+    "react-enty": "^2.0.0",
+    "react-reconciler": "^0.29.0",
     "spotify-web-api-node": "^5.0.2",
-    "typescript": "^4.8.4",
+    "swr": "^2.2.4",
     "valtio": "1.4.0",
     "winston": "^3.8.2",
     "yargs": "^17.6.0"
@@ -25,7 +26,9 @@
     "@types/lodash": "^4.14.188",
     "@types/node": "^18.11.7",
     "@types/react": "^18.0.24",
+    "@types/spotify-api": "^0.0.19",
     "@types/spotify-web-api-node": "^5.0.7",
-    "prettier": "^2.7.1"
+    "prettier": "^2.7.1",
+    "typescript": "^5.3.3"
   }
 }
