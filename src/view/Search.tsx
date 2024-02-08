@@ -1,19 +1,14 @@
-import {Box, Text, Key} from 'ink';
-import {useSnapshot} from 'valtio';
-import TextInput from 'ink-text-input';
-import {proxy} from 'valtio';
-import spotify from '../util/spotify';
-import logger from '../util/logger';
-import {Router} from '../index';
+import {Text, Input, useInput, Spinner, List} from 'react-curse';
+import spotify from '../util/spotify.js';
+import logger from '../util/logger.js';
+import {Router} from '../index.js';
+import {useState} from 'react';
+import {createRequestHook} from 'react-enty';
 
-export const SearchStore = proxy({
-    items: new Array<{name: string; type: string; uri: string; artist: string}>(),
-    type: 'artist' as 'album' | 'artist',
-    selected: 0,
-    query: '',
-    focus: false,
-    async search(query: string) {
-        const {body} = await spotify.search(query, [this.type], {limit: 20});
+const useSearchData = createRequestHook({
+    name: 'search',
+    request: async ({query, type}: {query: string; type: 'album' | 'artist'}) => {
+        const {body} = await spotify.search(query, [type], {limit: 20});
         const albums = (body.albums?.items || []).map(({name, type, uri, artists}) => ({
             name,
             type,
@@ -26,80 +21,75 @@ export const SearchStore = proxy({
             uri,
             artist: name
         }));
-        this.items = [...artists, ...albums];
-        this.selected = 0;
-    },
-    next() {
-        this.selected = Math.min(this.items.length, this.selected + 1);
-    },
-    prev() {
-        this.selected = Math.max(0, this.selected - 1);
-    },
-    mount() {
-        this.selected = 0;
-        this.items = [];
-        this.query = '';
-        this.focus = true;
-    },
-    useInput(input: string, key: Key) {
-        if (key.tab) {
-            this.type = this.type === 'album' ? 'artist' : 'album';
-            this.query = '';
-            this.items = [];
-        }
-        if (this.focus) {
-            if (key.return) {
-                this.focus = false;
-                return SearchStore.search(this.query);
-            }
-        } else {
-            if (key.downArrow || input === 'j') {
-                return SearchStore.next();
-            }
-            if (key.upArrow || input === 'k') {
-                return SearchStore.prev();
-            }
-            if (key.return && this.items.length) {
-                logger.info(this.items[this.selected]);
-                const uri = this.items[this.selected].uri;
-                Router.push(uri);
-                SearchStore.mount();
-                return;
-            }
-        }
+        return [...artists, ...albums];
     }
 });
 
 export default function Search() {
-    const snap = useSnapshot(SearchStore);
+    const [type, setType] = useState<'album' | 'artist'>('artist');
+    const [query, setQuery] = useState('');
+    const [selected, setSelected] = useState(0);
+    const [focus, setFocus] = useState(true);
+    const searchData = useSearchData({key: type});
+
+    useInput(
+        (key: string) => {
+            if (key === '\t') {
+                setType((next) => (next === 'album' ? 'artist' : 'album'));
+                setFocus(true);
+            }
+
+            if (key === 'p') {
+                logger.info(searchData.data?.[selected].uri);
+            }
+            if (key === '/') setFocus(true);
+            if (key === '\r' && focus) {
+                searchData.request({query, type});
+                setFocus(false);
+            }
+        },
+        [query, type, focus, selected, searchData.isSuccess]
+    );
+
+    if (searchData.isError) throw searchData.error;
 
     return (
         <>
-            <Box justifyContent="space-between">
-                <Box marginBottom={1}>
-                    <Text bold>Search: </Text>
-                    <TextInput
-                        value={snap.query}
-                        onChange={(next) => (SearchStore.query = next)}
-                        focus={!snap.items.length}
-                    />
-                </Box>
-                <Box>
-                    <Text color={snap.type === 'album' ? 'yellow' : undefined}>album</Text>
-                    <Text> </Text>
-                    <Text color={snap.type === 'artist' ? 'yellow' : undefined}>artist</Text>
-                </Box>
-            </Box>
-            {snap.items.map((ii, index) => {
-                return (
-                    <Box key={index}>
-                        <Text>{index === snap.selected ? '> ' : '  '}</Text>
-                        <Text wrap="truncate">
-                            {snap.type === 'album' ? `${ii.name} - ${ii.artist}` : ii.name}
+            <Text>
+                <Text bold>Search: </Text>
+                <Input value={query} onChange={setQuery} focus={focus} />
+            </Text>
+            <Text x="100%-12" block>
+                <Text color={type === 'album' ? 'yellow' : undefined}>album</Text>
+                <Text> </Text>
+                <Text color={type === 'artist' ? 'yellow' : undefined}>artist</Text>
+            </Text>
+            <Text block />
+            {searchData.isPending ? (
+                <Spinner color="white" absolute></Spinner>
+            ) : (
+                <List
+                    data={searchData.data ?? []}
+                    onChange={(next: {y: number}) => setSelected(next.y)}
+                    onSubmit={(next: {y: number}) =>
+                        Router.push(searchData.data?.[next.y].uri ?? '')
+                    }
+                    renderItem={({
+                        item,
+                        selected
+                    }: {
+                        item: {name: string; artist: string};
+                        selected: boolean;
+                    }) => (
+                        <Text>
+                            <Text>{selected ? '> ' : '  '}</Text>
+                            <Text wrap="truncate">
+                                {type === 'album' ? `${item.name} - ${item.artist}` : item.name}
+                            </Text>
                         </Text>
-                    </Box>
-                );
-            })}
+                    )}
+                />
+            )}
         </>
     );
 }

@@ -18,6 +18,7 @@ export const DeviceStore = proxy({
     },
     async fetchDevices() {
         const {body} = await spotify.getMyDevices();
+        logger.info(body);
         const devices = body.devices.map((ii) => ({
             id: ii.id,
             is_active: ii.is_active,
