@@ -7,8 +7,8 @@ import {Router} from '../index.js';
 
 const useArtistData = createRequestHook({
     name: 'useArtistData',
-    request: async (payload: {uri: string}) => {
-        const {body} = await spotify.getArtistAlbums(payload.uri.split(':')[2], {limit: 50});
+    request: async (id: string) => {
+        const {body} = await spotify.getArtistAlbums(id, {limit: 50});
         return {
             albums: body.items,
             artist: body.items[0].artists[0]
@@ -16,11 +16,11 @@ const useArtistData = createRequestHook({
     }
 });
 
-export default function Artist(props: {uri: string}) {
-    const message = useArtistData({key: props.uri});
+export default function Artist(props: {artist: string}) {
+    const message = useArtistData({key: props.artist});
     useEffect(() => {
-        if (message.isEmpty) message.request(props);
-    }, [props.uri]);
+        if (message.isEmpty) message.request(props.artist);
+    }, [props.artist]);
 
     if (message.isError) throw message.error;
     if (message.isEmpty || message.isPending) return <Spinner color="white" />;

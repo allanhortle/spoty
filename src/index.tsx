@@ -6,7 +6,7 @@ import logger from './util/logger.js';
 //import Player, {PlayerStore} from './view/Player.js';
 import Search from './view/Search.js';
 import Artist from './view/Artist.js';
-//import Album, {AlbumStore} from './view/Album.js';
+import Album from './view/Album.js';
 //import Home, {HomeStore} from './view/Home.js';
 //import Devices, {DeviceStore} from './view/Devices.js';
 //import useScreenSize from './util/useScreenSize.js';
@@ -81,8 +81,10 @@ function Routes() {
                     logger.info(route);
                     if (route === 'search') return <Search />;
                     //if (route === 'devices') return <Devices />;
-                    //if (route.startsWith('spotify:album')) return <Album />;
-                    if (route.startsWith('spotify:artist')) return <Artist uri={route} />;
+                    if (route.startsWith('spotify:album'))
+                        return <Album album={route.split(':')[2]} />;
+                    if (route.startsWith('spotify:artist'))
+                        return <Artist artist={route.split(':')[2]} />;
                     //if (route === 'devices') return <Devices />;
                     //if (route.startsWith('spotify:album')) return <Album />;
                     //if (route.startsWith('spotify:artist')) return <Artist />;
