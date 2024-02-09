@@ -82,9 +82,9 @@ function Routes() {
                     if (route === 'search') return <Search />;
                     //if (route === 'devices') return <Devices />;
                     if (route.startsWith('spotify:album'))
-                        return <Album album={route.split(':')[2]} />;
+                        return <Album id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:artist'))
-                        return <Artist artist={route.split(':')[2]} />;
+                        return <Artist id={route.split(':')[2]} />;
                     //if (route === 'devices') return <Devices />;
                     //if (route.startsWith('spotify:album')) return <Album />;
                     //if (route.startsWith('spotify:artist')) return <Artist />;
