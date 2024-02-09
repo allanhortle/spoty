@@ -69,11 +69,12 @@ export default function Search() {
                 <Spinner color="white" absolute></Spinner>
             ) : (
                 <List
+                    focus={!focus && searchData.isSuccess}
                     data={searchData.data ?? []}
                     onChange={(next: {y: number}) => setSelected(next.y)}
-                    onSubmit={(next: {y: number}) =>
-                        Router.push(searchData.data?.[next.y].uri ?? '')
-                    }
+                    onSubmit={(next: {y: number}) => {
+                        Router.push(searchData.data?.[next.y].uri);
+                    }}
                     renderItem={({
                         item,
                         selected

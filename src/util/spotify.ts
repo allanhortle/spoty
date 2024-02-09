@@ -1,6 +1,5 @@
 /// <reference types="spotify-api" />
 import SpotifyWebApi from 'spotify-web-api-node';
-import logger from './logger';
 
 const api = new SpotifyWebApi();
 if (!process.env.SPOTIFY_TOKEN) throw new Error('SPOTIFY_TOKEN not found');
