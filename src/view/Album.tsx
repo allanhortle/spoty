@@ -1,6 +1,6 @@
 import {ListTable, Text, useChildrenSize} from 'react-curse';
 import spotify from '../util/spotify.js';
-import type {Track, Album} from '../util/spotify.js';
+import type {Album} from '../util/spotify.js';
 import timeToString from '../util/timeToString.js';
 import {createRequestHook} from 'react-enty';
 import {useEffect} from 'react';
