@@ -16,11 +16,11 @@ const useArtistData = createRequestHook({
     }
 });
 
-export default function Artist(props: {artist: string}) {
-    const message = useArtistData({key: props.artist});
+export default function Artist(props: {id: string}) {
+    const message = useArtistData({key: props.id});
     useEffect(() => {
-        if (message.isEmpty) message.request(props.artist);
-    }, [props.artist]);
+        if (message.isEmpty) message.request(props.id);
+    }, [props.id]);
 
     if (message.isError) throw message.error;
     if (message.isEmpty || message.isPending) return <Spinner color="white" />;
