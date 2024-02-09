@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import {Component, Suspense} from 'react';
+import {Component} from 'react';
 import logger from './util/logger.js';
 //import {render, Box, Text, useApp, useInput, Key} from 'ink';
 //import Screen from './util/Screen.js';
 //import Player, {PlayerStore} from './view/Player.js';
-import Search, {SearchStore} from './view/Search.js';
-//import Artist, {ArtistStore} from './view/Artist.js';
+import Search from './view/Search.js';
+import Artist from './view/Artist.js';
 //import Album, {AlbumStore} from './view/Album.js';
 //import Home, {HomeStore} from './view/Home.js';
 //import Devices, {DeviceStore} from './view/Devices.js';
@@ -16,7 +16,7 @@ import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
 import {EntyProvider} from 'react-enty';
 
 export const Router = proxy({
-    route: ['search'] as string[],
+    route: [process.argv[2]] as string[],
     exit: () => {},
 
     push(route: string) {
@@ -78,10 +78,11 @@ function Routes() {
             <Text block x={2} y={2} width="100%-4" height="100%-6">
                 {(() => {
                     const route = snap.route.at(-1) || 'home';
+                    logger.info(route);
                     if (route === 'search') return <Search />;
                     //if (route === 'devices') return <Devices />;
                     //if (route.startsWith('spotify:album')) return <Album />;
-                    //if (route.startsWith('spotify:artist')) return <Artist />;
+                    if (route.startsWith('spotify:artist')) return <Artist uri={route} />;
                     //if (route === 'devices') return <Devices />;
                     //if (route.startsWith('spotify:album')) return <Album />;
                     //if (route.startsWith('spotify:artist')) return <Artist />;
@@ -115,13 +116,6 @@ export default class App extends Component<{}, {error: Error | null}> {
     try {
         await initializeStorage();
         ReactCurse.render(<App />);
-        //DeviceStore.mount();
-
-        //const {body} = await spotify.getMyCurrentPlaybackState();
-        //const album = body.item.album.uri;
-        //logger.info(album);
-        //Router.route = [album];
-        //Router.mount(Router.route.at(-1) || 'home');
     } catch (e) {
         logger.error(e);
     }

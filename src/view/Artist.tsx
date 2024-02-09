@@ -1,83 +1,66 @@
-import {Box, Text, Key, Spacer} from 'ink';
-import groupBy from 'lodash/groupBy';
-import {proxy, useSnapshot} from 'valtio';
-import {Router} from '..';
-import logger from '../util/logger';
-import spotify from '../util/spotify';
-import type {AlbumSimple, ArtistSimple} from '../util/spotify';
+import {useChildrenSize, List, Spinner, Text} from 'react-curse';
+import spotify from '../util/spotify.js';
+import type {AlbumSimple} from '../util/spotify.js';
+import {createRequestHook} from 'react-enty';
+import {useEffect} from 'react';
+import {Router} from '../index.js';
 
-export const ArtistStore = proxy({
-    selected: 0,
-    artist: null as ArtistSimple | null,
-    albums: [] as AlbumSimple[],
-    activeArtist: null as ArtistSimple | null,
-    next() {
-        this.selected = (this.selected + 1) % this.albums.length;
-    },
-    prev() {
-        const next = this.selected - 1;
-        this.selected = next === -1 ? this.albums.length - 1 : next;
-    },
-    async mount(uri: string) {
-        this.artist = null;
-        this.albums = [];
-        const {body} = await spotify.getArtistAlbums(uri, {limit: 50});
-        logger.info(body);
-        this.albums = body.items;
-        this.artist = body.items[0].artists[0];
-    },
-    useInput(input: string, key: Key) {
-        if (key.downArrow || input === 'j') {
-            return this.next();
-        }
-        if (key.upArrow || input === 'k') {
-            return this.prev();
-        }
-        if (key.return) Router.push(this.albums[this.selected].uri);
-
-        //if (input === '+') return this.setVolume(10);
-        //if (input === '-') return this.setVolume(-10);
+const useArtistData = createRequestHook({
+    name: 'useArtistData',
+    request: async (payload: {uri: string}) => {
+        const {body} = await spotify.getArtistAlbums(payload.uri.split(':')[2], {limit: 50});
+        return {
+            albums: body.items,
+            artist: body.items[0].artists[0]
+        };
     }
 });
 
-export default function Artist() {
-    const snap = useSnapshot(ArtistStore);
+export default function Artist(props: {uri: string}) {
+    const message = useArtistData({key: props.uri});
+    useEffect(() => {
+        if (message.isEmpty) message.request(props);
+    }, [props.uri]);
 
-    if (!snap.artist || !snap.albums.length) return null;
+    if (message.isError) throw message.error;
+    if (message.isEmpty || message.isPending) return <Spinner color="white" />;
+    const singleIndex = message.data.albums.findIndex((x) => x.album_type === 'single');
 
-    const groups = groupBy(snap.albums, 'album_group');
-
-    function album(list: AlbumSimple[]) {
-        return list.map((ii, index) => (
-            <Box key={index}>
-                <Text>{ii.id === snap.albums[snap.selected]?.id ? '> ' : '  '}</Text>
-                <Text>{ii.name}</Text>
-                <Spacer />
-                <Text>{ii.total_tracks} tracks</Text>
-                <Text> • </Text>
-                <Text>{ii.release_date.split('-')[0]}</Text>
-            </Box>
-        ));
-    }
-
+    const {albums, artist} = message.data;
     return (
         <>
-            <Box marginBottom={1}>
-                <Text bold>{snap.artist.name}</Text>
-            </Box>
-            <Box flexDirection="column">
-                <Text color="grey">Albums</Text>
-                {album(groups.album)}
-
-                {groups.single && (
-                    <>
-                        <Box marginTop={1}>
-                            <Text color="grey">Singles</Text>
-                        </Box>
-                        {album(groups.single)}
-                    </>
-                )}
-            </Box>
+            <Text bold block height={2}>
+                {artist.name}
+            </Text>
+            <Text>
+                <Text dim block>
+                    Albums
+                </Text>
+                <Text dim y={singleIndex}>
+                    Singles
+                </Text>
+                <Text x={8} y={0}>
+                    <List
+                        block
+                        data={albums}
+                        onSubmit={(next: {y: number}) => Router.push(albums[next.y].uri)}
+                        renderItem={({item, selected}: {item: AlbumSimple; selected: boolean}) => {
+                            const {name, total_tracks, release_date} = item;
+                            const date = release_date.split('-')[0];
+                            const details = `${total_tracks} tracks • ${date}`;
+                            return (
+                                <Text width="100%-2">
+                                    <Text>{selected ? '> ' : '  '}</Text>
+                                    <Text>{name}</Text>
+                                    <Text x={`100%-${useChildrenSize(details).width}`}>
+                                        {details}
+                                    </Text>
+                                </Text>
+                            );
+                        }}
+                    />
+                </Text>
+            </Text>
         </>
     );
 }
