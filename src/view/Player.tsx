@@ -1,11 +1,9 @@
-import {Box, Text} from 'ink';
+import {Text, useChildrenSize, useSize} from 'react-curse';
 import {useEffect} from 'react';
-import useScreenSize from '../util/useScreenSize';
 import {useSnapshot} from 'valtio';
-import {DeviceStore} from './Devices';
-import spotify from '../util/spotify';
-import logger from '../util/logger';
-import timeToString from '../util/timeToString';
+import spotify from '../util/spotify.js';
+import logger from '../util/logger.js';
+import timeToString from '../util/timeToString.js';
 import {proxy} from 'valtio';
 
 export const PlayerStore = proxy({
@@ -70,14 +68,12 @@ export const PlayerStore = proxy({
 });
 
 export default function Player() {
-    const {width} = useScreenSize();
     const snap = useSnapshot(PlayerStore);
-    const devicesSnap = useSnapshot(DeviceStore);
+    const {width} = useSize();
 
-    const safeWidth = width - 12;
-    const done = Math.round((safeWidth - 3) * snap.progressDecimal);
+    const done = Math.round(width * snap.progressDecimal);
 
-    const device = devicesSnap.activeDevice;
+    const device = {};
     useEffect(() => {
         PlayerStore.pollCurrentlyPlaying();
         const timer = setInterval(() => {
@@ -89,27 +85,21 @@ export default function Player() {
         };
     }, []);
 
+    const deviceDetails = `d=${device?.name ?? '?'} v=${device?.volume || 0}%`;
+
     return (
-        <Box flexDirection="column" paddingX={1} paddingBottom={1}>
-            <Box justifyContent="space-between">
+        <Text>
+            <Text block>
                 <Text>
                     {snap.track} - {snap.album} - {snap.artist}
                 </Text>
-                <Text>
-                    d={device?.name ?? '?'} v={device?.volume || 0}%
-                </Text>
-            </Box>
-            <Box justifyContent="space-between" width={width - 2}>
-                <Text color={snap.playing ? 'green' : 'yellow'}>{snap.progress}</Text>
-                <Box justifyContent="space-between">
-                    <Box>
-                        <Text>{'='.repeat(done)}</Text>
-                        <Text>{snap.playing ? '>' : '='}</Text>
-                    </Box>
-                    <Text>{'.'.repeat(safeWidth - 3 - done)}</Text>
-                </Box>
-                <Text>{snap.duration}</Text>
-            </Box>
-        </Box>
+                <Text x={`100%-${useChildrenSize(deviceDetails).width}`}>{deviceDetails}</Text>
+            </Text>
+            <Text dim>
+                <Text>{'='.repeat(done)}</Text>
+                <Text>{snap.playing ? '>' : '='}</Text>
+                <Text>{'.'.repeat(width - done)}</Text>
+            </Text>
+        </Text>
     );
 }

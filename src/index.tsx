@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 import {Component} from 'react';
 import logger from './util/logger.js';
-//import {render, Box, Text, useApp, useInput, Key} from 'ink';
-//import Screen from './util/Screen.js';
-//import Player, {PlayerStore} from './view/Player.js';
+import Player, {PlayerStore} from './view/Player.js';
 import Search from './view/Search.js';
 import Artist from './view/Artist.js';
 import Album from './view/Album.js';
@@ -85,15 +83,13 @@ function Routes() {
                         return <Album id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:artist'))
                         return <Artist id={route.split(':')[2]} />;
-                    //if (route === 'devices') return <Devices />;
-                    //if (route.startsWith('spotify:album')) return <Album />;
-                    //if (route.startsWith('spotify:artist')) return <Artist />;
                     return <Text>Home</Text>;
                 })()}
             </Text>
-            <Text absolute y="100%-3">
+            <Text absolute y="100%-3" block>
                 {'▀'.repeat(width)}
             </Text>
+            <Player />
         </EntyProvider>
     );
 }
