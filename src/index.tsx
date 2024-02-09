@@ -8,8 +8,7 @@ import Search from './view/Search.js';
 import Artist from './view/Artist.js';
 import Album from './view/Album.js';
 //import Home, {HomeStore} from './view/Home.js';
-//import Devices, {DeviceStore} from './view/Devices.js';
-//import useScreenSize from './util/useScreenSize.js';
+import Devices from './view/Devices.js';
 import {proxy, useSnapshot} from 'valtio';
 import {initializeStorage} from './util/storage.js';
 import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
@@ -69,6 +68,7 @@ function Routes() {
 
     useInput((input: string) => {
         if (input === '/') Router.push('search');
+        if (input === 'd') Router.push('devices');
         if (input === 'q') Router.route.length > 1 ? Router.pop() : useExit();
     });
 
@@ -80,7 +80,7 @@ function Routes() {
                     const route = snap.route.at(-1) || 'home';
                     logger.info(route);
                     if (route === 'search') return <Search />;
-                    //if (route === 'devices') return <Devices />;
+                    if (route === 'devices') return <Devices />;
                     if (route.startsWith('spotify:album'))
                         return <Album id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:artist'))
