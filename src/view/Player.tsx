@@ -6,29 +6,59 @@ import logger from '../util/logger.js';
 import timeToString from '../util/timeToString.js';
 import {proxy} from 'valtio';
 
+export type Device = {id: string | null; active: boolean; name: string; volume: number};
+
 export const PlayerStore = proxy({
     playing: false,
     track: '',
     artist: '',
     album: '',
     id: '',
-    foo: 23,
     progress: '00:00',
     progressDecimal: 0,
     duration: '00:00',
     shouldPoll: true,
+    activeDevice: undefined as Device | undefined,
+    devices: [] as Device[],
+    changing: false,
+
+    async mount() {
+        await this.fetchDevices();
+        if (this.devices.length === 1) this.activeDevice = this.devices[0];
+        if (this.activeDevice?.id) spotify.transferMyPlayback([this.activeDevice.id]);
+    },
+
+    async selectDevice(device: Device) {
+        this.activeDevice = device;
+        if (device.id) spotify.transferMyPlayback([device.id]);
+    },
+
+    async fetchDevices() {
+        const {body} = await spotify.getMyDevices();
+        this.devices = body.devices.map((ii) => ({
+            id: ii.id,
+            active: ii.is_active,
+            name: ii.name,
+            volume: ii.volume_percent || 0
+        }));
+
+        this.activeDevice = this.devices.find((ii) => ii.active);
+    },
+
     async pollCurrentlyPlaying() {
         if (!this.shouldPoll) return;
         try {
             const {body} = await spotify.getMyCurrentPlayingTrack();
             const {progress_ms, item} = body;
-            const duration = item?.duration_ms || 0;
-            const progress = progress_ms || 0;
-
             this.playing = body.is_playing;
-            this.progress = timeToString(progress);
-            this.progressDecimal = progress / duration;
+            const duration = item?.duration_ms || 0;
             this.duration = timeToString(duration);
+
+            if (duration > 0) {
+                const progress = progress_ms || 0;
+                this.progress = timeToString(progress);
+                this.progressDecimal = progress / duration;
+            }
 
             if (body?.item) {
                 if (body.item.type === 'track') {
@@ -48,7 +78,7 @@ export const PlayerStore = proxy({
         }
     },
     async playPause() {
-        const device_id = DeviceStore.activeDevice?.id;
+        const device_id = this.activeDevice?.id;
         if (!device_id) return logger.error('cant play, no device_id');
         const {body} = await spotify.getMyCurrentPlaybackState();
         if (body.is_playing && body.currently_playing_type !== 'unknown') {
@@ -59,21 +89,29 @@ export const PlayerStore = proxy({
             return;
         }
     },
-    play(context_uri: string, options: Parameters<typeof spotify.play>[0]) {
+    async play(context_uri: string, options: Parameters<typeof spotify.play>[0]) {
+        this.changing = true;
         logger.info({context_uri});
-        const device_id = DeviceStore.activeDevice?.id;
+        const device_id = this.activeDevice?.id;
         if (!device_id) return logger.error('cant play, no device_id', {context_uri});
-        spotify.play({device_id, context_uri, ...options}).catch(logger.error);
+        const payload = {device_id, context_uri, ...options};
+        logger.info(payload, 'play');
+        await spotify.play(payload).catch(logger.error);
+        await this.pollCurrentlyPlaying();
+        this.changing = false;
     }
 });
+
+export function usePlayer() {
+    return useSnapshot(PlayerStore);
+}
 
 export default function Player() {
     const snap = useSnapshot(PlayerStore);
     const {width} = useSize();
 
-    const done = Math.round(width * snap.progressDecimal);
+    const done = Math.round(width * snap.progressDecimal) || 0;
 
-    const device = {};
     useEffect(() => {
         PlayerStore.pollCurrentlyPlaying();
         const timer = setInterval(() => {
@@ -85,7 +123,9 @@ export default function Player() {
         };
     }, []);
 
-    const deviceDetails = `d=${device?.name ?? '?'} v=${device?.volume || 0}%`;
+    const deviceDetails = `d=${snap.activeDevice?.name ?? '?'} v=${
+        snap.activeDevice?.volume || 0
+    }%`;
 
     return (
         <Text>
@@ -98,7 +138,7 @@ export default function Player() {
             <Text dim>
                 <Text>{'='.repeat(done)}</Text>
                 <Text>{snap.playing ? '>' : '='}</Text>
-                <Text>{'.'.repeat(width - done)}</Text>
+                <Text>{'.'.repeat(Math.max(0, width - done))}</Text>
             </Text>
         </Text>
     );
