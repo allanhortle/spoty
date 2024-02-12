@@ -32,35 +32,12 @@ export const Router = proxy({
         this.route.pop();
         logger.info('pop', this.route);
     }
-    //mount(route: string) {
-    //if (route.includes('artist')) return ArtistStore.mount(route.split(':')[2]);
-    //if (route.includes('album')) return AlbumStore.mount(route.split(':')[2]);
-    //if (route === 'home') return HomeStore.mount();
-    //if (route === 'search') return SearchStore.mount();
-    //if (route === 'devices') return DeviceStore.mount();
-    //},
-    //useInput(input: string, key: Key) {
-    //const route = this.route.at(-1) || '';
-    //if (key.escape) this.pop();
-    //if (input === '/') this.push('search');
-    //if (!SearchStore.focus) {
-    //if (input === 'q') this.route.length > 1 ? this.pop() : this.exit();
-    //if (input === 'p') PlayerStore.playPause();
-    //if (input === 'h') this.route = ['home'];
-    //if (input === 'd') this.push('devices');
-    //}
-
-    //if (route === 'search') return SearchStore.useInput(input, key);
-    //if (route.includes('artist')) return ArtistStore.useInput(input, key);
-    //if (route.includes('album')) return AlbumStore.useInput(input, key);
-    //if (route === 'devices') return DeviceStore.useInput(input, key);
-    //return HomeStore.useInput(input, key);
-    //}
 });
 
 function Routes() {
     //const {exit} = useApp();
     const {width} = useSize();
+    logger.info({width});
     //Router.exit = exit;
     const snap = useSnapshot(Router);
 
@@ -113,6 +90,7 @@ export default class App extends Component<{}, {error: Error | null}> {
 (async () => {
     try {
         await initializeStorage();
+        await PlayerStore.mount();
         ReactCurse.render(<App />);
     } catch (e) {
         logger.error(e);
