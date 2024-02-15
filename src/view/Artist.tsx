@@ -3,8 +3,7 @@ import spotify from '../util/spotify.js';
 import type {AlbumSimple} from '../util/spotify.js';
 import {createRequestHook} from 'react-enty';
 import {useEffect} from 'react';
-import {Router} from '../index.js';
-import {usePlayer} from './Player.js';
+import Router from '../util/router.js';
 
 const useArtistData = createRequestHook({
     name: 'useArtistData',
@@ -18,7 +17,6 @@ const useArtistData = createRequestHook({
 });
 
 export default function Artist(props: {id: string}) {
-    const player = usePlayer();
     const message = useArtistData({key: props.id});
     useEffect(() => {
         if (message.isEmpty) message.request(props.id);

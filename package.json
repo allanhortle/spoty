@@ -9,9 +9,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@hono/node-server": "^1.7.0",
+    "conf": "^12.0.0",
     "env-paths": "^2.0.0",
+    "hono": "^4.0.1",
     "lodash": "^4.17.21",
     "make-dir": "^3.1.0",
+    "open": "^10.0.3",
     "react-curse": "^1.0.13",
     "react-dom": "^18.2.0",
     "react-enty": "^2.0.0",

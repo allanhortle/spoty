@@ -25,7 +25,6 @@ export const PlayerStore = proxy({
     async mount() {
         await this.fetchDevices();
         if (this.devices.length === 1) this.activeDevice = this.devices[0];
-        if (this.activeDevice?.id) spotify.transferMyPlayback([this.activeDevice.id]);
     },
 
     async selectDevice(device: Device) {
@@ -95,7 +94,7 @@ export const PlayerStore = proxy({
         const device_id = this.activeDevice?.id;
         if (!device_id) return logger.error('cant play, no device_id', {context_uri});
         const payload = {device_id, context_uri, ...options};
-        logger.info(payload, 'play');
+        logger.info('play', payload);
         await spotify.play(payload).catch(logger.error);
         await this.pollCurrentlyPlaying();
         this.changing = false;

@@ -1,8 +1,8 @@
 import {useSnapshot} from 'valtio';
 import {List, Text} from 'react-curse';
-import {PlayerStore} from './Player.js';
+import {PlayerStore, Device} from './Player.js';
 
-export default function DeviceMenu() {
+export default function Devices() {
     const snap = useSnapshot(PlayerStore);
     return (
         <>

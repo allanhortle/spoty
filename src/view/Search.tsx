@@ -1,7 +1,7 @@
 import {Text, Input, useInput, Spinner, List} from 'react-curse';
 import spotify from '../util/spotify.js';
 import logger from '../util/logger.js';
-import {Router} from '../index.js';
+import Router from '../util/router.js';
 import {useState} from 'react';
 import {createRequestHook} from 'react-enty';
 
@@ -73,7 +73,7 @@ export default function Search() {
                     data={searchData.data ?? []}
                     onChange={(next: {y: number}) => setSelected(next.y)}
                     onSubmit={(next: {y: number}) => {
-                        Router.push(searchData.data?.[next.y].uri);
+                        Router.push(searchData.data?.[next.y].uri ?? '');
                     }}
                     renderItem={({
                         item,
