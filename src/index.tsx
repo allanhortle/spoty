@@ -1,44 +1,22 @@
 #!/usr/bin/env node
-import {Component} from 'react';
+import {Component, useState} from 'react';
+import open from 'open';
 import logger from './util/logger.js';
 import Player, {PlayerStore} from './view/Player.js';
 import Search from './view/Search.js';
 import Artist from './view/Artist.js';
 import Album from './view/Album.js';
-//import Home, {HomeStore} from './view/Home.js';
 import Devices from './view/Devices.js';
-import {proxy, useSnapshot} from 'valtio';
-import {initializeStorage} from './util/storage.js';
+import {useSnapshot} from 'valtio';
+import storage from './util/storage.js';
+import Router from './util/router.js';
+import {authUrl, generateAuthUrl, refreshTokens} from './util/spotify.js';
 import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
 import {EntyProvider} from 'react-enty';
-
-export const Router = proxy({
-    route: [process.argv[2]] as string[],
-    exit: () => {},
-
-    push(route: string) {
-        if (this.route.at(-1) !== route) {
-            //this.mount(route);
-            this.route.push(route);
-        }
-    },
-    replace(route: string) {
-        if (this.route.at(-1) !== route) {
-            //this.mount(route);
-            this.route[this.route.length - 1] = route;
-        }
-    },
-    pop() {
-        this.route.pop();
-        logger.info('pop', this.route);
-    }
-});
+import tokenHandler from './handler/token.js';
 
 function Routes() {
-    //const {exit} = useApp();
     const {width} = useSize();
-    logger.info({width});
-    //Router.exit = exit;
     const snap = useSnapshot(Router);
 
     useInput((input: string) => {
@@ -80,19 +58,53 @@ export default class App extends Component<{}, {error: Error | null}> {
     componentDidCatch(error: Error) {
         logger.error(error);
         this.setState({error});
-        useExit(1);
+        console.error(error);
+        //useExit(1);
     }
     render() {
         return this.state.error ? <Text color="red">{this.state.error.message}</Text> : <Routes />;
     }
 }
 
-(async () => {
+function FetchTokens(props: {authUrl: string}) {
+    const [once, setOnce] = useState(true);
+    useInput(
+        (input: string) => {
+            if (input === 'q') useExit();
+            if (input === '\r' && once) {
+                open(props.authUrl);
+                setOnce(false);
+            }
+        },
+        [once]
+    );
+    return (
+        <Text>
+            <Text block>To use spoty you need to authorise it with spotify</Text>
+            <Text block>Press return to open the browser</Text>
+        </Text>
+    );
+}
+
+export async function main() {
     try {
-        await initializeStorage();
+        logger.info(storage.get('tokens'));
+        logger.info(new Date(storage.get('tokenTTL')));
+        const authUrl = await generateAuthUrl();
+        if (!storage.get('tokens')) {
+            tokenHandler();
+            return ReactCurse.render(<FetchTokens authUrl={authUrl} />);
+        }
+
+        await refreshTokens();
+
+        //await initializeStorage();
         await PlayerStore.mount();
         ReactCurse.render(<App />);
     } catch (e) {
         logger.error(e);
+        console.error(e);
     }
-})();
+}
+
+main();

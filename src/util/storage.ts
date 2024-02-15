@@ -1,11 +1,6 @@
-import envPaths from 'env-paths';
-import mkdir from 'make-dir';
+import Conf from 'conf';
+import {Tokens} from './spotify.js';
 
-const paths = envPaths('spoty');
+const storage = new Conf<{tokens: Tokens}>({projectName: 'spoty'});
 
-export const logPath = paths.log;
-
-export async function initializeStorage() {
-    await mkdir(paths.data);
-    await mkdir(paths.log);
-}
+export default storage;

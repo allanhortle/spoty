@@ -53,9 +53,7 @@ export default function Album({id}: {id: string}) {
                     const details = `${explicit} ${duration}`;
                     const id = album.tracks.items[index].id;
                     return (
-                        <Text
-                                    color={player.id === id ? 'green' : undefined}
-                        >
+                        <Text color={player.id === id ? 'green' : undefined}>
                             <Text>{y === index ? (changing ? '~ ' : '> ') : '  '}</Text>
                             <Text dim width={number.length + 1} x={5 - number.length}>
                                 {number}
@@ -68,4 +66,4 @@ export default function Album({id}: {id: string}) {
             />
         </>
     );
-
+}
