@@ -15,8 +15,9 @@ import Router from './util/router.js';
 import {generateAuthUrl, refreshTokens} from './util/spotify.js';
 import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
 import {EntyProvider} from 'react-enty';
-import tokenHandler from './handler/token.js';
+import fetchTokens from './handler/fetchTokens.js';
 import {FocusProvider, useFocus} from './util/focusContext.js';
+import startApp from './handler/startApp.js';
 
 function Routes() {
     const {width} = useSize();
@@ -89,41 +90,11 @@ export default class App extends Component<{}, {error: Error | null}> {
     }
 }
 
-function FetchTokens(props: {authUrl: string}) {
-    const [once, setOnce] = useState(true);
-    useInput(
-        (input: string) => {
-            if (input === 'q') useExit();
-            if (input === '\r' && once) {
-                open(props.authUrl);
-                setOnce(false);
-            }
-        },
-        [once]
-    );
-    return (
-        <Text>
-            <Text block>To use spoty you need to authorise it with spotify</Text>
-            <Text block>Press return to open the browser</Text>
-        </Text>
-    );
-}
-
-export async function main() {
+async function main() {
     try {
-        logger.info(storage.get('tokens'));
-        logger.info(new Date(storage.get('tokenTTL')));
-        const authUrl = await generateAuthUrl();
-        if (!storage.get('tokens')) {
-            tokenHandler();
-            return ReactCurse.render(<FetchTokens authUrl={authUrl} />);
-        }
+        if (!storage.get('tokens')) return fetchTokens();
 
-        await refreshTokens();
-
-        //await initializeStorage();
-        await PlayerStore.mount();
-        ReactCurse.render(<App />);
+        return startApp();
     } catch (e) {
         logger.error(e);
         console.error(e);

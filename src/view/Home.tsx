@@ -3,7 +3,6 @@ import spotify from '../util/spotify.js';
 import Router from '../util/router.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
-import logger from '../util/logger.js';
 
 const useHomeData = createRequestHook({
     name: 'homeData',
@@ -33,10 +32,6 @@ export default function Home() {
     const mediumItems = medium.filter((ii) => !shortSet.has(ii.name));
     const longItems = long.filter((ii) => !shortSet.has(ii.name) && !mediumSet.has(ii.name));
     const items = [...short, ...mediumItems, ...longItems];
-
-    const data = short.map((item, index) => {
-        return [item.name, medium[index].name, long[index].name];
-    });
 
     return (
         <Text>
