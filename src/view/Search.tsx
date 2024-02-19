@@ -1,9 +1,9 @@
 import {Text, Input, useInput, Spinner, List} from 'react-curse';
 import spotify from '../util/spotify.js';
-import logger from '../util/logger.js';
 import Router from '../util/router.js';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {createRequestHook} from 'react-enty';
+import {useFocus} from '../util/focusContext.js';
 
 const useSearchData = createRequestHook({
     name: 'search',
@@ -29,8 +29,12 @@ export default function Search() {
     const [type, setType] = useState<'album' | 'artist'>('artist');
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState(0);
-    const [focus, setFocus] = useState(true);
+    const [focus, setFocus] = useFocus();
     const searchData = useSearchData({key: type});
+
+    useEffect(() => {
+        setFocus(true);
+    }, []);
 
     useInput(
         (key: string) => {
@@ -39,9 +43,6 @@ export default function Search() {
                 setFocus(true);
             }
 
-            if (key === 'p') {
-                logger.info(searchData.data?.[selected].uri);
-            }
             if (key === '/') setFocus(true);
             if (key === '\r' && focus) {
                 searchData.request({query, type});
@@ -73,7 +74,7 @@ export default function Search() {
                     data={searchData.data ?? []}
                     onChange={(next: {y: number}) => setSelected(next.y)}
                     onSubmit={(next: {y: number}) => {
-                        Router.push(searchData.data?.[next.y].uri ?? '');
+                        Router.replace(searchData.data?.[next.y].uri ?? '');
                     }}
                     renderItem={({
                         item,

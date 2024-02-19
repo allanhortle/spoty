@@ -14,6 +14,7 @@ export const PlayerStore = proxy({
     artist: '',
     album: '',
     id: '',
+    albumUri: '',
     progress: '00:00',
     progressDecimal: 0,
     duration: '00:00',
@@ -66,6 +67,7 @@ export const PlayerStore = proxy({
                     this.id = body.item.id;
                     this.artist = artists.map((ii) => ii.name).join(', ');
                     this.album = album.name;
+                    this.albumUri = album.uri;
                 } else {
                     throw new Error(`${body.item.type} not accounted for`);
                 }
