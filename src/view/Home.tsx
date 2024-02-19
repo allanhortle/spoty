@@ -1,4 +1,4 @@
-import {Spinner, Text, ListTable, List} from 'react-curse';
+import {Spinner, Text, List} from 'react-curse';
 import spotify from '../util/spotify.js';
 import Router from '../util/router.js';
 import {useEffect} from 'react';
@@ -41,7 +41,6 @@ export default function Home() {
     });
 
     logger.info(new Set(data.flat(1)).size);
-    const head = ['Short', 'Medium', 'Long'];
     return (
         <Text>
             <Text bold height={2} block>
@@ -63,8 +62,6 @@ export default function Home() {
                     onSubmit={(next: {y: number}) => Router.push(items[next.y].uri)}
                     renderItem={({item, selected}: {item: {name: string}; selected: boolean}) => {
                         const {name} = item;
-                        //const date = release_date.split('-')[0];
-                        //const details = `${total_tracks} tracks • ${date}`;
                         return (
                             <Text width="100%">
                                 <Text>{selected ? '> ' : '  '}</Text>
@@ -76,70 +73,4 @@ export default function Home() {
             </Text>
         </Text>
     );
-
-    return (
-        <ListTable
-            head={head}
-            data={data}
-            onSubmit={(next: {y: number; x: number}) => {
-                const {x, y} = next;
-                logger.info({x, y});
-                //const uri = album.tracks.items[next.y].uri;
-                //logger.info(uri);
-                //PlayerStore.play(album.uri, {offset: {position: next.y}});
-            }}
-            renderHead={({item}) =>
-                item.map((i, key) => (
-                    <Text key={key} bold width="33.333%">
-                        {'  '}
-                        {i}
-                    </Text>
-                ))
-            }
-            renderItem={({item, x, y, index}) =>
-                item.map((text, key) => {
-                    const active = y === index && x === key ? 'Green' : undefined;
-                    return (
-                        <Text key={key} width="33.333%">
-                            {active ? '> ' : '  '}
-                            {text}
-                        </Text>
-                    );
-                })
-            }
-        />
-    );
 }
-//renderItem={({
-//item,
-//y,
-//x,
-//index,
-//...rest
-//}: {
-//item: string[];
-//y: number;
-//index: number;
-//}) => {
-////const [number, name, explicit, duration] = item;
-////const details = `${explicit} ${duration}`;
-////const id = album.tracks.items[index].id;
-//const [short, medium, long] = item;
-//return (
-//<Text>
-//<Text width="33.333%">{short}</Text>
-//<Text width="33.333%">{long}</Text>
-//<Text width="33.333%">{medium}</Text>
-//</Text>
-//);
-//return (
-//<Text color={player.id === id ? 'green' : undefined}>
-//<Text>{y === index ? (changing ? '~ ' : '> ') : '  '}</Text>
-//<Text dim width={number.length + 1} x={5 - number.length}>
-//{number}
-//</Text>
-//<Text>{name}</Text>
-//<Text x={`100%-${useChildrenSize(details).width}`}>{details}</Text>
-//</Text>
-//);
-//}}

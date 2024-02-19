@@ -7,6 +7,10 @@
     "author": "Allan Hortle <allanhortle@gmail.com>",
     "license": "MIT",
     "type": "module",
+    "scripts": {
+        "build": "yarn tsc",
+        "watch": "yarn tsc --watch"
+    },
     "dependencies": {
         "@hono/node-server": "^1.7.0",
         "conf": "^12.0.0",
