@@ -31,7 +31,7 @@ const scopes = [
 const api = new SpotifyWebApi({clientId, redirectUri});
 
 export async function generateAuthUrl() {
-    const generateRandomString = (length) => {
+    const generateRandomString = (length: number) => {
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         const values = crypto.getRandomValues(new Uint8Array(length));
         return values.reduce((acc, x) => acc + possible[x % possible.length], '');
@@ -39,13 +39,13 @@ export async function generateAuthUrl() {
 
     const codeVerifier = generateRandomString(64);
 
-    const sha256 = async (plain) => {
+    const sha256 = async (plain: string) => {
         const encoder = new TextEncoder();
         const data = encoder.encode(plain);
         return webcrypto.subtle.digest('SHA-256', data);
     };
 
-    const base64encode = (input) => {
+    const base64encode = (input: ArrayBuffer) => {
         return btoa(String.fromCharCode(...new Uint8Array(input)))
             .replace(/=/g, '')
             .replace(/\+/g, '-')
@@ -56,19 +56,17 @@ export async function generateAuthUrl() {
     const codeChallenge = base64encode(hashed);
 
     const authUrl = new URL('https://accounts.spotify.com/authorize');
-
-    const params = {
+    authUrl.search = new URLSearchParams({
         response_type: 'code',
         client_id: clientId,
         scope: scopes.join(' '),
         state: codeVerifier,
-        show_dialogue: false,
+        show_dialogue: 'false',
         code_challenge_method: 'S256',
         code_challenge: codeChallenge,
         redirect_uri: redirectUri
-    };
+    }).toString();
 
-    authUrl.search = new URLSearchParams(params).toString();
     return authUrl.toString();
 }
 
@@ -95,7 +93,6 @@ export async function convertCodeToAccessToken(code?: string, state?: string) {
     const body = await fetch('https://accounts.spotify.com/api/token', payload);
     const response = await body.json();
     logger.info(response);
-    //const tokens = await api.authorizationCodeGrant(code);
     saveTokens(response);
 }
 
@@ -134,8 +131,6 @@ export async function refreshTokens() {
     const response = await body.json();
     saveTokens(response);
 }
-
-// PKCE
 
 export default api;
 
