@@ -1,63 +1,145 @@
-//import {Box, Text, Key} from 'ink';
-//import {proxy, useSnapshot} from 'valtio';
-//import spotify, {ArtistSimple} from '../util/spotify';
+import {Spinner, Text, ListTable, List} from 'react-curse';
+import spotify from '../util/spotify.js';
+import Router from '../util/router.js';
+import {useEffect} from 'react';
+import {createRequestHook} from 'react-enty';
+import logger from '../util/logger.js';
 
-//export const HomeStore = proxy({
-//selected: 0,
-//short_term: [] as ArtistSimple[],
-//medium_term: [] as ArtistSimple[],
-//long_term: [] as ArtistSimple[],
-//next() {
-//this.selected = (this.selected + 1) % this.short_term.length;
-//},
-//prev() {
-//const next = this.selected - 1;
-//this.selected = next === -1 ? this.short_term.length - 1 : next;
-//},
-//async mount() {
-//const {body: short_term} = await spotify.getMyTopArtists({time_range: 'short_term'});
-//const {body: medium_term} = await spotify.getMyTopArtists({time_range: 'medium_term'});
-//const {body: long_term} = await spotify.getMyTopArtists({time_range: 'long_term'});
-//this.short_term = short_term.items;
-//this.medium_term = medium_term.items;
-//this.long_term = long_term.items;
-//},
-//useInput(input: string, key: Key) {
-//if (key.downArrow || input === 'j') return this.next();
-//if (key.upArrow || input === 'k') return this.prev();
-//}
-//});
+const useHomeData = createRequestHook({
+    name: 'homeData',
+    request: async () => {
+        const [short, medium, long] = await Promise.all([
+            spotify.getMyTopArtists({time_range: 'short_term'}).then((x) => x.body.items),
+            spotify.getMyTopArtists({time_range: 'medium_term'}).then((x) => x.body.items),
+            spotify.getMyTopArtists({time_range: 'long_term'}).then((x) => x.body.items)
+        ]);
 
-//export default function Home() {
-//const snap = useSnapshot(HomeStore);
-//if (!snap.short_term.length) return null;
+        return {short, medium, long};
+    }
+});
 
+export default function Home() {
+    const message = useHomeData();
+    useEffect(() => {
+        if (message.isEmpty) message.request();
+    }, []);
+    if (message.isError) throw message.error;
+    if (message.isEmpty || message.isFetching) return <Spinner color="white" />;
+    const {short, medium, long} = message.data;
+
+    const shortSet = new Set(short.map((ii) => ii.name));
+    const mediumSet = new Set(medium.map((ii) => ii.name));
+
+    const mediumItems = medium.filter((ii) => !shortSet.has(ii.name));
+    const longItems = long.filter((ii) => !shortSet.has(ii.name) && !mediumSet.has(ii.name));
+    const items = [...short, ...mediumItems, ...longItems];
+
+    logger.info([short.length, medium.length, long.length]);
+
+    const data = short.map((item, index) => {
+        return [item.name, medium[index].name, long[index].name];
+    });
+
+    logger.info(new Set(data.flat(1)).size);
+    const head = ['Short', 'Medium', 'Long'];
+    return (
+        <Text>
+            <Text bold height={2} block>
+                Top Artists
+            </Text>
+            <Text dim block>
+                Short
+            </Text>
+            <Text dim block y={short.length}>
+                Medium
+            </Text>
+            <Text dim block y={short.length + mediumItems.length}>
+                Long
+            </Text>
+            <Text x={8} y={2}>
+                <List
+                    block
+                    data={items}
+                    onSubmit={(next: {y: number}) => Router.push(items[next.y].uri)}
+                    renderItem={({item, selected}: {item: {name: string}; selected: boolean}) => {
+                        const {name} = item;
+                        //const date = release_date.split('-')[0];
+                        //const details = `${total_tracks} tracks • ${date}`;
+                        return (
+                            <Text width="100%">
+                                <Text>{selected ? '> ' : '  '}</Text>
+                                <Text>{name}</Text>
+                            </Text>
+                        );
+                    }}
+                />
+            </Text>
+        </Text>
+    );
+
+    return (
+        <ListTable
+            head={head}
+            data={data}
+            onSubmit={(next: {y: number; x: number}) => {
+                const {x, y} = next;
+                logger.info({x, y});
+                //const uri = album.tracks.items[next.y].uri;
+                //logger.info(uri);
+                //PlayerStore.play(album.uri, {offset: {position: next.y}});
+            }}
+            renderHead={({item}) =>
+                item.map((i, key) => (
+                    <Text key={key} bold width="33.333%">
+                        {'  '}
+                        {i}
+                    </Text>
+                ))
+            }
+            renderItem={({item, x, y, index}) =>
+                item.map((text, key) => {
+                    const active = y === index && x === key ? 'Green' : undefined;
+                    return (
+                        <Text key={key} width="33.333%">
+                            {active ? '> ' : '  '}
+                            {text}
+                        </Text>
+                    );
+                })
+            }
+        />
+    );
+}
+//renderItem={({
+//item,
+//y,
+//x,
+//index,
+//...rest
+//}: {
+//item: string[];
+//y: number;
+//index: number;
+//}) => {
+////const [number, name, explicit, duration] = item;
+////const details = `${explicit} ${duration}`;
+////const id = album.tracks.items[index].id;
+//const [short, medium, long] = item;
 //return (
-//<Box>
-//<Box flexDirection="column" flexGrow={1}>
-//<Box marginBottom={1}>
-//<Text bold>Recent Artists</Text>
-//</Box>
-//{snap.short_term.map((ii) => (
-//<Text>{ii.name}</Text>
-//))}
-//</Box>
-//<Box flexDirection="column" flexGrow={1}>
-//<Box marginBottom={1}>
-//<Text bold>Not so recent</Text>
-//</Box>
-//{snap.medium_term.map((ii) => (
-//<Text>{ii.name}</Text>
-//))}
-//</Box>
-//<Box flexDirection="column" flexGrow={1}>
-//<Box marginBottom={1}>
-//<Text bold>Not so recent</Text>
-//</Box>
-//{snap.long_term.map((ii) => (
-//<Text>{ii.name}</Text>
-//))}
-//</Box>
-//</Box>
+//<Text>
+//<Text width="33.333%">{short}</Text>
+//<Text width="33.333%">{long}</Text>
+//<Text width="33.333%">{medium}</Text>
+//</Text>
 //);
-//}
+//return (
+//<Text color={player.id === id ? 'green' : undefined}>
+//<Text>{y === index ? (changing ? '~ ' : '> ') : '  '}</Text>
+//<Text dim width={number.length + 1} x={5 - number.length}>
+//{number}
+//</Text>
+//<Text>{name}</Text>
+//<Text x={`100%-${useChildrenSize(details).width}`}>{details}</Text>
+//</Text>
+//);
+//}}

@@ -7,10 +7,11 @@ import Search from './view/Search.js';
 import Artist from './view/Artist.js';
 import Album from './view/Album.js';
 import Devices from './view/Devices.js';
+import Home from './view/Home.js';
 import {useSnapshot} from 'valtio';
 import storage from './util/storage.js';
 import Router from './util/router.js';
-import {authUrl, generateAuthUrl, refreshTokens} from './util/spotify.js';
+import {generateAuthUrl, refreshTokens} from './util/spotify.js';
 import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
 import {EntyProvider} from 'react-enty';
 import tokenHandler from './handler/token.js';
@@ -38,7 +39,7 @@ function Routes() {
                         return <Album id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:artist'))
                         return <Artist id={route.split(':')[2]} />;
-                    return <Text>Home</Text>;
+                    return <Home />;
                 })()}
             </Text>
             <Text absolute y="100%-3" block>
@@ -104,6 +105,7 @@ export async function main() {
     } catch (e) {
         logger.error(e);
         console.error(e);
+        useExit();
     }
 }
 

@@ -28,7 +28,6 @@ export default function Album({id}: {id: string}) {
 
     const {album} = message.data;
     const changing = player.changing;
-
     return (
         <>
             <Text bold block>
