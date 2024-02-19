@@ -34,13 +34,10 @@ export default function Home() {
     const longItems = long.filter((ii) => !shortSet.has(ii.name) && !mediumSet.has(ii.name));
     const items = [...short, ...mediumItems, ...longItems];
 
-    logger.info([short.length, medium.length, long.length]);
-
     const data = short.map((item, index) => {
         return [item.name, medium[index].name, long[index].name];
     });
 
-    logger.info(new Set(data.flat(1)).size);
     return (
         <Text>
             <Text bold height={2} block>
