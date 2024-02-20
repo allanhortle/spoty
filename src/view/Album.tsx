@@ -7,12 +7,14 @@ import {useEffect} from 'react';
 import {Spinner} from 'react-curse';
 import {PlayerStore, usePlayer} from './Player.js';
 import logger from '../util/logger.js';
+import getColors from 'get-image-colors';
 
 const useAlbumData = createRequestHook({
     name: 'useAlbumData',
     request: async (id: string) => {
         const {body} = await spotify.getAlbum(id);
-        return {album: body};
+        const cover = (await getColors(body.images[0].url, {count: 5})).map((x) => x.hex());
+        return {album: body, cover};
     }
 });
 
@@ -26,18 +28,25 @@ export default function Album({id}: {id: string}) {
     if (message.isError) throw message.error;
     if (message.isEmpty || message.isPending) return <Spinner color="white" />;
 
-    const {album} = message.data;
+    const {album, cover} = message.data;
     const changing = player.changing;
     const albumArtists = new Set(album.artists.map((ii) => ii.id));
+    logger.info(cover);
     return (
         <>
-            <Text bold block>
+            <Text background={cover[0]}> </Text>
+            <Text background={cover[1]}> </Text>
+            <Text bold block x={3}>
                 {album.artists.map((ii) => ii.name).join(', ')}
             </Text>
-            <Text block>{album.name}</Text>
+
+            <Text background={cover[2]}> </Text>
+            <Text background={cover[3]}> </Text>
+            <Text block x={3}>
+                {album.name}
+            </Text>
             <ListTable
                 data={album.tracks.items.map((item) => {
-                    logger.info(item);
                     return [
                         `${item.track_number}.`,
                         item.name,
