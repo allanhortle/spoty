@@ -28,6 +28,7 @@ export default function Album({id}: {id: string}) {
 
     const {album} = message.data;
     const changing = player.changing;
+    const albumArtists = new Set(album.artists.map((ii) => ii.id));
     return (
         <>
             <Text bold block>
@@ -35,12 +36,19 @@ export default function Album({id}: {id: string}) {
             </Text>
             <Text block>{album.name}</Text>
             <ListTable
-                data={album.tracks.items.map((item) => [
-                    `${item.track_number}.`,
-                    item.name,
-                    item.explicit ? '[E]' : '',
-                    timeToString(item.duration_ms)
-                ])}
+                data={album.tracks.items.map((item) => {
+                    logger.info(item);
+                    return [
+                        `${item.track_number}.`,
+                        item.name,
+                        item.artists
+                            .filter((ii) => !albumArtists.has(ii.id))
+                            .map((ii) => ii.name)
+                            .join(', '),
+                        item.explicit ? '[E]' : '',
+                        timeToString(item.duration_ms)
+                    ];
+                })}
                 onSubmit={(next: {y: number}) => {
                     const uri = album.tracks.items[next.y].uri;
                     logger.info(uri);
@@ -48,7 +56,7 @@ export default function Album({id}: {id: string}) {
                     PlayerStore.play(album.uri, {offset: {position: next.y}});
                 }}
                 renderItem={({item, y, index}: {item: string[]; y: number; index: number}) => {
-                    const [number, name, explicit, duration] = item;
+                    const [number, name, features, explicit, duration] = item;
                     const details = `${explicit} ${duration}`;
                     const id = album.tracks.items[index].id;
                     return (
@@ -58,6 +66,7 @@ export default function Album({id}: {id: string}) {
                                 {number}
                             </Text>
                             <Text>{name}</Text>
+                            {features ? <Text dim> {features}</Text> : <Text />}
                             <Text x={`100%-${useChildrenSize(details).width}`}>{details}</Text>
                         </Text>
                     );
