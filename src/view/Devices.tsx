@@ -1,6 +1,7 @@
 import {useSnapshot} from 'valtio';
-import {List, Text} from 'react-curse';
-import {PlayerStore, Device} from './Player.js';
+import {Text} from 'react-curse';
+import {PlayerStore} from './Player.js';
+import List from '../components/List.js';
 
 export default function Devices() {
     const snap = useSnapshot(PlayerStore);
@@ -11,18 +12,13 @@ export default function Devices() {
             </Text>
             <List
                 data={snap.devices}
-                onSubmit={(next: {y: number}) => {
-                    const device = snap.devices[next.y];
+                onChange={(device) => {
                     if (device) PlayerStore.selectDevice(device);
                 }}
-                renderItem={({item, selected}: {item: Device; selected: boolean}) => {
+                renderItem={(item) => {
                     return (
-                        <Text
-                            color={item.id === snap.activeDevice?.id ? 'green' : undefined}
-                            width="100%-2"
-                        >
-                            <Text>{selected ? '> ' : '  '}</Text>
-                            <Text>{item.name}</Text>
+                        <Text color={item.id === snap.activeDevice?.id ? 'green' : undefined}>
+                            {item.name}
                         </Text>
                     );
                 }}

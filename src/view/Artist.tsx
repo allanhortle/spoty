@@ -1,9 +1,9 @@
-import {useChildrenSize, List, Spinner, Text} from 'react-curse';
+import {useChildrenSize, Spinner, Text} from 'react-curse';
 import spotify from '../util/spotify.js';
-import type {AlbumSimple} from '../util/spotify.js';
 import {createRequestHook} from 'react-enty';
 import {useEffect} from 'react';
 import Router from '../util/router.js';
+import List from '../components/List.js';
 
 const useArtistData = createRequestHook({
     name: 'useArtistData',
@@ -41,21 +41,19 @@ export default function Artist(props: {id: string}) {
                 </Text>
                 <Text x={8} y={0}>
                     <List
-                        block
                         data={albums}
-                        onSubmit={(next: {y: number}) => Router.push(albums[next.y].uri)}
-                        renderItem={({item, selected}: {item: AlbumSimple; selected: boolean}) => {
+                        onChange={(next) => Router.push(next.uri)}
+                        renderItem={(item) => {
                             const {name, total_tracks, release_date} = item;
                             const date = release_date.split('-')[0];
                             const details = `${total_tracks} tracks • ${date}`;
                             return (
-                                <Text width="100%-2">
-                                    <Text>{selected ? '> ' : '  '}</Text>
+                                <>
                                     <Text>{name}</Text>
                                     <Text x={`100%-${useChildrenSize(details).width}`}>
                                         {details}
                                     </Text>
-                                </Text>
+                                </>
                             );
                         }}
                     />

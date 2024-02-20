@@ -1,9 +1,10 @@
-import {Text, Input, useInput, Spinner, List} from 'react-curse';
+import {Text, Input, useInput, Spinner} from 'react-curse';
 import spotify from '../util/spotify.js';
 import Router from '../util/router.js';
 import {useEffect, useState} from 'react';
 import {createRequestHook} from 'react-enty';
 import {useFocus} from '../util/focusContext.js';
+import List from '../components/List.js';
 
 const useSearchData = createRequestHook({
     name: 'search',
@@ -28,7 +29,6 @@ const useSearchData = createRequestHook({
 export default function Search() {
     const [type, setType] = useState<'album' | 'artist'>('artist');
     const [query, setQuery] = useState('');
-    const [selected, setSelected] = useState(0);
     const [focus, setFocus] = useFocus();
     const searchData = useSearchData({key: type});
 
@@ -49,7 +49,7 @@ export default function Search() {
                 setFocus(false);
             }
         },
-        [query, type, focus, selected, searchData.isSuccess]
+        [query, type, focus, searchData.isSuccess]
     );
 
     if (searchData.isError) throw searchData.error;
@@ -72,22 +72,12 @@ export default function Search() {
                 <List
                     focus={!focus && searchData.isSuccess}
                     data={searchData.data ?? []}
-                    onChange={(next: {y: number}) => setSelected(next.y)}
-                    onSubmit={(next: {y: number}) => {
-                        Router.replace(searchData.data?.[next.y].uri ?? '');
+                    onChange={(next) => {
+                        Router.replace(next.uri);
                     }}
-                    renderItem={({
-                        item,
-                        selected
-                    }: {
-                        item: {name: string; artist: string};
-                        selected: boolean;
-                    }) => (
-                        <Text>
-                            <Text>{selected ? '> ' : '  '}</Text>
-                            <Text wrap="truncate">
-                                {type === 'album' ? `${item.name} - ${item.artist}` : item.name}
-                            </Text>
+                    renderItem={(item) => (
+                        <Text wrap="truncate">
+                            {type === 'album' ? `${item.name} - ${item.artist}` : item.name}
                         </Text>
                     )}
                 />

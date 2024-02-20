@@ -1,8 +1,9 @@
-import {Spinner, Text, List} from 'react-curse';
+import {Spinner, Text} from 'react-curse';
 import spotify from '../util/spotify.js';
 import Router from '../util/router.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
+import List from '../components/List.js';
 
 const useHomeData = createRequestHook({
     name: 'homeData',
@@ -49,18 +50,9 @@ export default function Home() {
             </Text>
             <Text x={8} y={2}>
                 <List
-                    block
                     data={items}
-                    onSubmit={(next: {y: number}) => Router.push(items[next.y].uri)}
-                    renderItem={({item, selected}: {item: {name: string}; selected: boolean}) => {
-                        const {name} = item;
-                        return (
-                            <Text width="100%">
-                                <Text>{selected ? '> ' : '  '}</Text>
-                                <Text>{name}</Text>
-                            </Text>
-                        );
-                    }}
+                    onChange={(next) => Router.push(next.uri)}
+                    renderItem={(item) => <Text>{item.name}</Text>}
                 />
             </Text>
         </Text>
