@@ -1,7 +1,7 @@
 {
   "name": "spoty",
   "bin": "./build/index.js",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "main": "index.js",
   "repository": "git@github.com:allanhortle/spoty.git",
   "author": "Allan Hortle <allanhortle@gmail.com>",
