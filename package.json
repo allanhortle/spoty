@@ -1,29 +1,41 @@
 {
-  "name": "spoty",
-  "bin": "./build/index.js",
-  "version": "1.0.0",
-  "main": "index.js",
-  "repository": "git@github.com:allanhortle/raindrop-tui.git",
-  "author": "Allan Hortle <allanhortle@gmail.com>",
-  "license": "MIT",
-  "private": true,
-  "dependencies": {
-    "@types/spotify-api": "^0.0.19",
-    "ink": "^3.2.0",
-    "ink-text-input": "^4.0.3",
-    "lodash": "^4.17.21",
-    "react": "17.x.x",
-    "spotify-web-api-node": "^5.0.2",
-    "typescript": "^4.8.4",
-    "valtio": "1.4.0",
-    "winston": "^3.8.2",
-    "yargs": "^17.6.0"
-  },
-  "devDependencies": {
-    "@types/lodash": "^4.14.188",
-    "@types/node": "^18.11.7",
-    "@types/react": "^18.0.24",
-    "@types/spotify-web-api-node": "^5.0.7",
-    "prettier": "^2.7.1"
-  }
+    "name": "spoty",
+    "bin": "./build/index.js",
+    "version": "1.2.0",
+    "main": "index.js",
+    "repository": "git@github.com:allanhortle/raindrop-tui.git",
+    "author": "Allan Hortle <allanhortle@gmail.com>",
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "build": "yarn tsc",
+        "watch": "yarn tsc --watch"
+    },
+    "dependencies": {
+        "@hono/node-server": "^1.7.0",
+        "conf": "^12.0.0",
+        "env-paths": "^2.0.0",
+        "hono": "^4.0.1",
+        "lodash": "^4.17.21",
+        "make-dir": "^3.1.0",
+        "open": "^10.0.3",
+        "react-curse": "^1.0.13",
+        "react-dom": "^18.2.0",
+        "react-enty": "^2.0.0",
+        "react-reconciler": "^0.29.0",
+        "spotify-web-api-node": "^5.0.2",
+        "swr": "^2.2.4",
+        "valtio": "1.4.0",
+        "winston": "^3.8.2",
+        "yargs": "^17.6.0"
+    },
+    "devDependencies": {
+        "@types/lodash": "^4.14.188",
+        "@types/node": "^18.11.7",
+        "@types/react": "^18.0.24",
+        "@types/spotify-api": "^0.0.19",
+        "@types/spotify-web-api-node": "^5.0.7",
+        "prettier": "^2.7.1",
+        "typescript": "^5.3.3"
+    }
 }

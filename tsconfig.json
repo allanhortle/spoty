@@ -5,6 +5,7 @@
     "outDir": "build",
     "esModuleInterop": true,
     "downlevelIteration": true,
+    "module": "nodenext",
     "jsx": "react-jsx"
   },
   "include": ["types.d.ts", "src"]

@@ -1,78 +1,68 @@
-import {Box, Text, Key, Spacer} from 'ink';
-import {proxy, useSnapshot} from 'valtio';
-import logger from '../util/logger';
-import spotify from '../util/spotify';
-import type {Track, Album} from '../util/spotify';
-import timeToString from '../util/timeToString';
-import {PlayerStore} from './Player';
-//import {Router} from '../index';
+import {ListTable, Text, useChildrenSize} from 'react-curse';
+import spotify from '../util/spotify.js';
+import type {Album} from '../util/spotify.js';
+import timeToString from '../util/timeToString.js';
+import {createRequestHook} from 'react-enty';
+import {useEffect} from 'react';
+import {Spinner} from 'react-curse';
+import {PlayerStore, usePlayer} from './Player.js';
+import logger from '../util/logger.js';
 
-export const AlbumStore = proxy({
-    selected: 0,
-    tracks: [] as Track[],
-    album: null as Album | null,
-    next() {
-        this.selected = (this.selected + 1) % this.tracks.length;
-    },
-    prev() {
-        const next = this.selected - 1;
-        this.selected = next === -1 ? this.tracks.length - 1 : next;
-    },
-    async mount(uri: string) {
-        logger.info(uri);
-        this.tracks = [];
-        const [album, tracks] = await Promise.all([
-            spotify.getAlbum(uri),
-            spotify.getAlbumTracks(uri, {limit: 50})
-        ]);
-        this.tracks = tracks.body.items;
-        this.album = album.body;
-    },
-    useInput(input: string, key: Key) {
-        if (key.downArrow || input === 'j') return this.next();
-        if (key.upArrow || input === 'k') return this.prev();
-        if (key.return && this.album) {
-            return PlayerStore.play(this.album.uri, {
-                offset: {position: this.selected}
-            });
-        }
+const useAlbumData = createRequestHook({
+    name: 'useAlbumData',
+    request: async (id: string) => {
+        const {body} = await spotify.getAlbum(id);
+        return {album: body};
     }
 });
 
-export default function Album() {
-    const snap = useSnapshot(AlbumStore);
-    const playerSnap = useSnapshot(PlayerStore);
+export default function Album({id}: {id: string}) {
+    const player = usePlayer();
+    const message = useAlbumData({key: id});
+    useEffect(() => {
+        if (message.isEmpty) message.request(id);
+    }, [id]);
 
-    if (!snap.tracks.length || !snap.album) return null;
+    if (message.isError) throw message.error;
+    if (message.isEmpty || message.isPending) return <Spinner color="white" />;
 
-    const trackNumberWidth = snap.tracks.reduce(
-        (aa, bb) => Math.max(aa, String(bb.track_number).length),
-        0
-    );
-
+    const {album} = message.data;
+    const changing = player.changing;
     return (
         <>
-            <Box marginBottom={1} flexDirection="column">
-                <Text bold>{snap.album.artists.map((ii) => ii.name).join(', ')}</Text>
-                <Text>{snap.album.name}</Text>
-            </Box>
-            <Box flexDirection="column">
-                {snap.tracks.map((ii, index) => {
-                    const color = playerSnap.id === ii.id ? 'green' : undefined;
+            <Text bold block>
+                {album.artists.map((ii) => ii.name).join(', ')}
+            </Text>
+            <Text block>{album.name}</Text>
+            <ListTable
+                data={album.tracks.items.map((item) => [
+                    `${item.track_number}.`,
+                    item.name,
+                    item.explicit ? '[E]' : '',
+                    timeToString(item.duration_ms)
+                ])}
+                onSubmit={(next: {y: number}) => {
+                    const uri = album.tracks.items[next.y].uri;
+                    logger.info(uri);
+
+                    PlayerStore.play(album.uri, {offset: {position: next.y}});
+                }}
+                renderItem={({item, y, index}: {item: string[]; y: number; index: number}) => {
+                    const [number, name, explicit, duration] = item;
+                    const details = `${explicit} ${duration}`;
+                    const id = album.tracks.items[index].id;
                     return (
-                        <Box key={index}>
-                            <Text>{ii.id === snap.tracks[snap.selected]?.id ? '> ' : '  '}</Text>
-                            <Text color={color || 'grey'}>
-                                {String(ii.track_number).padStart(trackNumberWidth, ' ')}.
+                        <Text color={player.id === id ? 'green' : undefined}>
+                            <Text>{y === index ? (changing ? '~ ' : '> ') : '  '}</Text>
+                            <Text dim width={number.length + 1} x={5 - number.length}>
+                                {number}
                             </Text>
-                            <Text color={color}> {ii.name}</Text>
-                            <Spacer />
-                            {ii.explicit ? <Text color={color}>[E] </Text> : null}
-                            <Text color={color}>{timeToString(ii.duration_ms)}</Text>
-                        </Box>
+                            <Text>{name}</Text>
+                            <Text x={`100%-${useChildrenSize(details).width}`}>{details}</Text>
+                        </Text>
                     );
-                })}
-            </Box>
+                }}
+            />
         </>
     );
 }
