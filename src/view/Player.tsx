@@ -24,7 +24,18 @@ export const PlayerStore = proxy({
     changing: false,
 
     async mount() {
-        await this.fetchDevices();
+        // Spotify rate limits the shared first-party quota (HTTP 429), so a
+        // device fetch can fail at boot. Retry quietly instead of dying: the
+        // valtio store updates the UI when the list finally arrives.
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                await this.fetchDevices();
+                break;
+            } catch (e) {
+                logger.error(e);
+                await new Promise((resolve) => setTimeout(resolve, 30000));
+            }
+        }
         if (this.devices.length === 1) this.activeDevice = this.devices[0];
     },
 
@@ -73,21 +84,31 @@ export const PlayerStore = proxy({
                 }
             }
         } catch (e) {
-            this.shouldPoll = false;
-            logger.info('polling error');
             logger.error(e);
+            // Back off instead of stopping forever: a 429 asks for ~a minute,
+            // and one bad response shouldn't kill the player UI permanently.
+            const rateLimited = (e as {statusCode?: number} | null)?.statusCode === 429;
+            this.shouldPoll = false;
+            setTimeout(() => {
+                this.shouldPoll = true;
+            }, rateLimited ? 60000 : 10000);
         }
     },
     async playPause() {
-        const device_id = this.activeDevice?.id;
-        if (!device_id) return logger.error('cant play, no device_id');
-        const {body} = await spotify.getMyCurrentPlaybackState();
-        if (body.is_playing && body.currently_playing_type !== 'unknown') {
-            await spotify.pause({device_id});
-            return;
-        } else {
-            await spotify.play({device_id});
-            return;
+        try {
+            const device_id = this.activeDevice?.id;
+            if (!device_id) return logger.error('cant play, no device_id');
+            const {body} = await spotify.getMyCurrentPlaybackState();
+            if (body.is_playing && body.currently_playing_type !== 'unknown') {
+                await spotify.pause({device_id});
+                return;
+            } else {
+                await spotify.play({device_id});
+                return;
+            }
+        } catch (e) {
+            // Runs from a keypress; an unhandled throw here would crash the TUI.
+            logger.error(e);
         }
     },
     async play(context_uri: string, options: Parameters<typeof spotify.play>[0]) {
@@ -117,7 +138,7 @@ export default function Player() {
         PlayerStore.pollCurrentlyPlaying();
         const timer = setInterval(() => {
             PlayerStore.pollCurrentlyPlaying();
-        }, 500);
+        }, 3000);
 
         return () => {
             clearInterval(timer);

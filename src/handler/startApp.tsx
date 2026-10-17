@@ -5,6 +5,8 @@ import ReactCurse from 'react-curse';
 
 export default async function startApp() {
     await refreshTokens();
-    await PlayerStore.mount();
+    // mount fetches the device list with its own retries; render immediately
+    // and let the store update when Spotify answers.
+    PlayerStore.mount();
     ReactCurse.render(<App />);
 }

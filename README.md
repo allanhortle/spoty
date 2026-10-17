@@ -8,8 +8,8 @@ A TUI for Spotify
 ```
 npm install -g spoty
 ```
-2. Run the `spoty` command and it will send you off to a browser to authenticate with your spotify account. 
-3. Press `d` to pick a device for playback
+2. Run the `spoty` command and it will show a pairing code — approve it at `spotify.com/pair` with your Spotify account. spoty logs in as Spotify's own desktop client, so there's no developer app to set up.
+3. Press `d` to pick a device for playback (the Spotify desktop app works great — spoty remote-controls it via Spotify Connect)
 4. Browse your recently played, or use `/` to search for something
 
 ## Controls

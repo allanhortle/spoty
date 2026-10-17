@@ -131,20 +131,17 @@
   resolved "https://registry.yarnpkg.com/@esbuild/win32-x64/-/win32-x64-0.19.12.tgz#c57c8afbb4054a3ab8317591a0b7320360b444ae"
   integrity sha512-T1QyPSDCyMXaO3pzBkF96E8xMkiRYbUEZADd29SyPGabqxMViNoii+NcK7eWJAEoU6RZyEm5lVSIjTmcdoB9HA==
 
-"@hono/node-server@^1.7.0":
-  version "1.7.0"
-  resolved "https://registry.yarnpkg.com/@hono/node-server/-/node-server-1.7.0.tgz#2aaeb3196881a9af18fa1cbc6250332047d4bd6b"
-  integrity sha512-W+Gy16xWZMgB8hYU4XInCwE746y8V3VDTH1J3+EhUBqbCzk4zEXo1p6dv3BiCD5O6Z4aHuoCW+mRKoJgUn3ZCA==
-
 "@types/lodash@^4.14.188":
   version "4.14.188"
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.188.tgz#e4990c4c81f7c9b00c5ff8eae389c10f27980da5"
   integrity sha512-zmEmF5OIM3rb7SbLCFYoQhO4dGt2FRM9AMkxvA3LaADOF1n8in/zGJlWji9fmafLoNyz+FoL6FE0SLtGIArD7w==
 
-"@types/node@^18.11.7":
-  version "18.11.8"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.11.8.tgz#16d222a58d4363a2a359656dd20b28414de5d265"
-  integrity sha512-uGwPWlE0Hj972KkHtCDVwZ8O39GmyjfMane1Z3GUBGGnkZ2USDq7SxLpVIiIHpweY9DS0QTDH0Nw7RNBsAAZ5A==
+"@types/node@^24.0.0":
+  version "24.19.2"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-24.19.2.tgz#8718eedbc0f89648de6525be9f4a9c61cdbaa502"
+  integrity sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==
+  dependencies:
+    undici-types ">=7.24.0 <7.24.7"
 
 "@types/prop-types@*":
   version "15.7.5"
@@ -775,11 +772,6 @@ has@^1.0.3:
   dependencies:
     function-bind "^1.1.1"
 
-hono@^4.0.1:
-  version "4.0.1"
-  resolved "https://registry.yarnpkg.com/hono/-/hono-4.0.1.tgz#a7bc40c323ebb1f7c4084a326406ccb689806a68"
-  integrity sha512-S9cREGPJIAK437RhroOf1PGlJPIlt5itl69OmQ6onPLo5pdCbSHGL8v4uAKxrdHjcTyuoyvKPqWm5jv0dGkdFA==
-
 htmlparser2@^8.0.1:
   version "8.0.2"
   resolved "https://registry.yarnpkg.com/htmlparser2/-/htmlparser2-8.0.2.tgz#f002151705b383e62433b5cf466f5b716edaec21"
@@ -946,6 +938,11 @@ logform@^2.3.2, logform@^2.4.0:
     safe-stable-stringify "^2.3.1"
     triple-beam "^1.3.0"
 
+long@^5.3.2:
+  version "5.3.2"
+  resolved "https://registry.yarnpkg.com/long/-/long-5.3.2.tgz#1d84463095999262d7d7b7f8bfd4a8cc55167f83"
+  integrity sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==
+
 loose-envify@^1.1.0:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/loose-envify/-/loose-envify-1.4.0.tgz#71ee51fa7be4caec1a63839f7e682d8132d30caf"
@@ -1105,6 +1102,13 @@ prettier@^2.7.1:
   version "2.7.1"
   resolved "https://registry.yarnpkg.com/prettier/-/prettier-2.7.1.tgz#e235806850d057f97bb08368a4f7d899f7760c64"
   integrity sha512-ujppO+MkdPqoVINuDFDRLClm7D78qbDt0/NR+wp5FqEZOoTNAjPHWj17QRhu7geIHJfcNhRk1XVQmF8Bp3ye+g==
+
+protobufjs@^8.8.1:
+  version "8.8.1"
+  resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-8.8.1.tgz#61668e88c4e6931fb3db0c8dfbf7019cb6516d91"
+  integrity sha512-d9e9179bjXSJdpJ3+R9fP8hzXsnKLyxTjHLG1dUzje8a27pPyXCe6PrcRtgx2rjoM3IZzHd2vAs+6J/BsO1k7Q==
+  dependencies:
+    long "^5.3.2"
 
 proxy-compare@2.1.0:
   version "2.1.0"
@@ -1418,6 +1422,11 @@ uint8array-extras@^0.3.0:
   version "0.3.0"
   resolved "https://registry.yarnpkg.com/uint8array-extras/-/uint8array-extras-0.3.0.tgz#4b5714e4bf15bb36ae7fd6faeef11aae34a0af59"
   integrity sha512-erJsJwQ0tKdwuqI0359U8ijkFmfiTcq25JvvzRVc1VP+2son1NJRXhxcAKJmAW3ajM8JSGAfsAXye8g4s+znxA==
+
+"undici-types@>=7.24.0 <7.24.7":
+  version "7.24.6"
+  resolved "https://registry.yarnpkg.com/undici-types/-/undici-types-7.24.6.tgz#61275b485d7fd4e9d269c7cf04ec2873c9cc0f91"
+  integrity sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==
 
 uniq@^1.0.0:
   version "1.0.1"

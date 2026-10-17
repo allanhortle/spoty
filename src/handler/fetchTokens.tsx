@@ -1,31 +1,42 @@
-import {Hono} from 'hono';
 import ReactCurse from 'react-curse';
-import {serve, type HttpBindings} from '@hono/node-server';
-import {convertCodeToAccessToken, generateAuthUrl} from '../util/spotify.js';
+import {pollForPairing, requestPairingCode} from '../util/spotify.js';
 import logger from '../util/logger.js';
 import startApp from './startApp.js';
 import TokenSplash from '../view/TokenSplash.js';
 
-type Bindings = HttpBindings & {
-    /* ... */
-};
-
-const app = new Hono<{Bindings: Bindings}>();
-
-app.get('/token', async (c) => {
-    logger.info({code: c.req.query('code'), state: c.req.query('state')});
-    try {
-        await convertCodeToAccessToken(c.req.query('code'), c.req.query('state'));
-        startApp();
-        return c.text('Token saved! You can close this window and go back to the terminal');
-    } catch (e) {
-        logger.error(e);
-        return c.text('Something went wrong converting the grant to a token');
+function describeError(e: unknown): string {
+    // spotify-web-api-node throws WebapiError, whose message is the useless
+    // "[object Object]"; its useful bits are statusCode and body.
+    const statusCode = (e as {statusCode?: number} | null)?.statusCode;
+    if (statusCode === 429) {
+        return 'Spotify is rate limiting us (HTTP 429) — wait a minute, then run spoty again';
     }
-});
+    if (statusCode) {
+        return `Spotify returned HTTP ${statusCode}`;
+    }
+    if (e instanceof Error && e.message && e.message !== '[object Object]') {
+        return e.message;
+    }
+    try {
+        return JSON.stringify(e);
+    } catch {
+        return String(e);
+    }
+}
 
 export default async function tokenHandler() {
-    const authUrl = await generateAuthUrl();
-    serve({fetch: app.fetch, port: 15298});
-    return ReactCurse.render(<TokenSplash authUrl={authUrl} />);
+    const pairing = await requestPairingCode();
+
+    // Spotify shows a code at spotify.com/pair; once the user approves it there,
+    // the poll resolves and we boot the app. No port to listen on.
+    pollForPairing(pairing.deviceCode, pairing.interval)
+        .then(() => startApp())
+        .catch((e: unknown) => {
+            logger.error(e);
+            // Note: the pairing itself may have succeeded (tokens are stored),
+            // so this is usually a boot problem, not a login one.
+            ReactCurse.render(<TokenSplash error={describeError(e)} />);
+        });
+
+    return ReactCurse.render(<TokenSplash code={pairing.userCode} url={pairing.verificationUrl} />);
 }

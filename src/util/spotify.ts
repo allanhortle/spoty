@@ -1,8 +1,6 @@
 /// <reference types="spotify-api" />
 import SpotifyWebApi from 'spotify-web-api-node';
 import storage from './storage.js';
-import {webcrypto} from 'crypto';
-import logger from './logger.js';
 
 export type Tokens = {
     access_token: string;
@@ -11,8 +9,12 @@ export type Tokens = {
     scope: string;
     token_type: string;
 };
-const clientId = '294a411559ca49d3ac08b12e5de384eb';
-const redirectUri = 'http://localhost:15298/token';
+
+// Spotify's own desktop client id (librespot's "keymaster"). Pairing with it
+// yields first-party tokens, so the Web API treats spoty like the official
+// app rather than a restricted developer app. No client secret, no developer
+// app registration, no callback server.
+const clientId = '65b708073fc0480ea92a077233ca87bd';
 const scopes = [
     'user-top-read',
     'user-read-playback-position',
@@ -28,72 +30,60 @@ const scopes = [
     'playlist-read-private'
 ];
 
-const api = new SpotifyWebApi({clientId, redirectUri});
+const api = new SpotifyWebApi({clientId});
 
-export async function generateAuthUrl() {
-    const generateRandomString = (length: number) => {
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        const values = crypto.getRandomValues(new Uint8Array(length));
-        return values.reduce((acc, x) => acc + possible[x % possible.length], '');
+export type Pairing = {
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    interval: number;
+};
+
+export async function requestPairingCode(): Promise<Pairing> {
+    const response = await fetch('https://accounts.spotify.com/oauth2/device/authorize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({client_id: clientId, scope: scopes.join(' ')})
+    });
+    const body = await response.json();
+    if (!response.ok) {
+        throw new Error(body.error_description ?? body.error ?? 'Pairing request failed');
+    }
+    return {
+        deviceCode: body.device_code,
+        userCode: body.user_code,
+        verificationUrl: body.verification_uri_complete ?? body.verification_uri,
+        interval: body.interval ?? 5
     };
-
-    const codeVerifier = generateRandomString(64);
-
-    const sha256 = async (plain: string) => {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(plain);
-        return webcrypto.subtle.digest('SHA-256', data);
-    };
-
-    const base64encode = (input: ArrayBuffer) => {
-        return btoa(String.fromCharCode(...new Uint8Array(input)))
-            .replace(/=/g, '')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_');
-    };
-
-    const hashed = await sha256(codeVerifier);
-    const codeChallenge = base64encode(hashed);
-
-    const authUrl = new URL('https://accounts.spotify.com/authorize');
-    authUrl.search = new URLSearchParams({
-        response_type: 'code',
-        client_id: clientId,
-        scope: scopes.join(' '),
-        state: codeVerifier,
-        show_dialogue: 'false',
-        code_challenge_method: 'S256',
-        code_challenge: codeChallenge,
-        redirect_uri: redirectUri
-    }).toString();
-
-    return authUrl.toString();
 }
 
-export const authUrl = api.createAuthorizeURL(scopes, '');
+export async function pollForPairing(deviceCode: string, interval = 5): Promise<Tokens> {
+    for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, interval * 1000));
 
-export async function convertCodeToAccessToken(code?: string, state?: string) {
-    if (!code) throw new Error('Code was not found');
-    if (!state) throw new Error('State was not found');
+        const response = await fetch('https://accounts.spotify.com/api/token', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({
+                client_id: clientId,
+                grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+                device_code: deviceCode
+            })
+        });
+        const body = await response.json();
 
-    const payload = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-            client_id: clientId,
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: redirectUri,
-            code_verifier: state
-        })
-    };
-
-    const body = await fetch('https://accounts.spotify.com/api/token', payload);
-    const response = await body.json();
-    logger.info(response);
-    saveTokens(response);
+        if (response.ok) {
+            saveTokens(body);
+            return body;
+        }
+        if (body.error === 'authorization_pending') continue;
+        if (body.error === 'slow_down') {
+            interval += 5;
+            continue;
+        }
+        // access_denied, expired_token or anything unexpected
+        throw new Error(body.error_description ?? body.error ?? 'Pairing failed');
+    }
 }
 
 export function saveTokens(tokens: Tokens) {
@@ -129,6 +119,14 @@ export async function refreshTokens() {
     };
     const body = await fetch(url, payload);
     const response = await body.json();
+    if (!response.access_token) {
+        // The stored refresh token is dead (expired, revoked, or left over
+        // from the old developer-app login). Clear it so the app falls back
+        // to pairing instead of limping along with a stale token.
+        storage.delete('tokens');
+        storage.delete('tokenTTL');
+        throw new Error(response.error_description ?? response.error ?? 'Token refresh failed');
+    }
     saveTokens(response);
 }
 

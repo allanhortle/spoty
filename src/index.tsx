@@ -12,7 +12,6 @@ import Help from './view/Help.js';
 import {useSnapshot} from 'valtio';
 import storage from './util/storage.js';
 import Router from './util/router.js';
-import {generateAuthUrl, refreshTokens} from './util/spotify.js';
 import ReactCurse, {Text, useInput, useExit, useSize} from 'react-curse';
 import {EntyProvider} from 'react-enty';
 import fetchTokens from './handler/fetchTokens.js';
@@ -97,6 +96,8 @@ async function main() {
         return startApp();
     } catch (e) {
         logger.error(e);
+        // A failed refresh clears the stored login; re-pair instead of dying.
+        if (!storage.get('tokens')) return fetchTokens();
         console.error(e);
         useExit();
     }
