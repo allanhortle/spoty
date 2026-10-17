@@ -15,6 +15,7 @@ export type Tokens = {
 // app rather than a restricted developer app. No client secret, no developer
 // app registration, no callback server.
 const clientId = '65b708073fc0480ea92a077233ca87bd';
+export {clientId};
 const scopes = [
     'user-top-read',
     'user-read-playback-position',

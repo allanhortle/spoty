@@ -65,28 +65,45 @@ no login5 or client-token needed; confirmed live).
       supportsGzipPushes: true, commandAcks: true}}}
   ```
 - **Response body = full `spotify.connectstate.Cluster`** (protobuf):
-  `activeDeviceId`, `device` map (`id → DeviceInfo{name, deviceType, deviceId, volume…}`),
-  `playerState` (`PlayerState`: `isPaused`, `positionAsOfTimestamp`, `duration`,
-  `contextUri`, `track.metadata["artist.name"|"title"|…]`, `nextTracks`, …).
+  `activeDeviceId`, `playerState` (**top-level Cluster field 3**),
+  `device` **map of id → DeviceInfo directly** (no Device wrapper),
+  DeviceInfo = `{name, deviceType, deviceId, volume…}`
+  PlayerState = `{isPaused, positionAsOfTimestamp, duration, contextUri,
+  track.metadata[…], nextTracks, …}`.
   Validated live: returned the real cluster (`studio`, `MacBook Pro`, `Marantz NR1509`).
+- **Volume is 0..65535** (validated live: raw 16384 = 25% — divide by 65535 for a
+  percent).
+- **PlayerState.track.metadata keys are snake_case** (validated live):
+  `title`, `album_title`, `album_uri`, `artist_uri`, `context_uri`, `entity_uri`,
+  `image_*_url`, `view_index` — **there is NO artist name key**; resolve artist
+  names via extended-metadata TRACK_V4 (see `fetchTrack` in `src/util/spclient.ts`;
+  snake_case NOT dot-case — `album.title`/`artist.name` do not exist).
 - Poll cadence: every ~5s is fine; interpolate position locally between polls
   using `positionAsOfTimestamp + (now - timestamp)` while not paused.
 - Persist one `ourDeviceId` + `connectionId` for the process (or in conf) and
   reuse them; keep the reason `NEW_DEVICE` on first PUT per process.
 
-### 2. Playback commands — JSON POST (source-verified; validate on first use)
+### 2. Playback commands — JSON POST (VALIDATED LIVE, 200, 2026-10-17)
 `POST /connect-state/v1/player/command/from/{ourDeviceId}/to/{targetDeviceId}`
 - Headers: `Content-Type: application/json`, `x-spotify-connection-id`.
-- Envelope (spotatui `send_player_command`):
+- Envelope (spotatui `send_player_command`) — accepted live exactly as below
+  (resume / pause / play-with-track_index all worked, implementation in
+  `sendPlayerCommand` in `src/util/spclient.ts`):
   ```json
   {"command": <command>, "connection_type": "wlan", "intent_id": "<commandId>"}
   ```
   `commandId` = 32 hex chars of `(BigInt(Date.now()) << 64n | random64bit)`.
   The client adds into `command`:
   `options: {override_restrictions: false, only_for_local_device: false, system_initiated: false}`
-  and `logging_params: {command_initiated_time: now, command_received_time: now,
+  (for `play`, merge these INTO the existing options object that already has
+  license/skip_to/player_options_override) and
+  `logging_params: {command_initiated_time: now, command_received_time: now,
   page_instance_ids: [], interaction_ids: [], device_identifier: ourDeviceId, command_id: commandId}`.
-- Command vocabulary (verbatim from spotatui `player.rs`):
+- Semantic errors come back as **HTTP 403 with JSON**
+  `{error_code, error_description, reasons[]}` (e.g. `pause_restricted` /
+  `["already_paused"]` when pausing a paused device) — treat as info, not crash.
+- Command vocabulary (verbatim from spotatui `player.rs`; resume/pause/play
+  validated live, rest source-verified):
   - play: `{"endpoint": "play", "context": {"uri": ctx, "url": "context://" + ctx, "metadata": {}},
     "play_origin": {"feature_identifier": "spoty", "feature_version": "1.4.1"},
     "options": {"license": "premium", "skip_to": {"track_uri": uri} | {"track_index": n} | {}, "player_options_override": {}}}`
@@ -98,13 +115,14 @@ no login5 or client-token needed; confirmed live).
   - repeat: `{"endpoint": "set_repeating_context"|"set_repeating_track", "value": …}`
   - queue: `{"endpoint": "add_to_queue", "track": {"uri": uri, "metadata": {"is_queued": "true"}, "provider": "queue"}}`
 
-### 3. Device transfer — JSON POST (source-verified; validate on first use)
+### 3. Device transfer — JSON POST (VALIDATED LIVE, 200, 2026-10-17)
 `POST /connect-state/v1/connect/transfer/from/{fromDeviceId}/to/{toDeviceId}`
   - `from` = `cluster.activeDeviceId`, or the target itself if nothing is active.
-  - Body is plain JSON (spotatui serializes a `TransferRequest` struct):
-    try camelCase first `{"transferOptions": {"restorePaused": "resume"|"pause"}}`,
-    then the fork's literal snake_case `{"transfer_options": {"restore_paused": …}}`.
-  - Headers: at least `Authorization`; add `x-spotify-connection-id` if refused.
+  - **Body casing settled (open question 2): camelCase works** —
+    `{"transferOptions": {"restorePaused": "resume"}}` returned HTTP 200 with
+    `{"ack_id": "…"}` (validated live via a self-transfer, active→active; a real
+    cross-device transfer uses the same envelope, validated in normal use).
+  - Headers: at least `Authorization`; `x-spotify-connection-id` (spFetch adds it).
 
 ### 4. Search — pathfinder (validated live, 200)
 `POST https://api-partner.spotify.com/pathfinder/v2/query`
@@ -132,20 +150,41 @@ no login5 or client-token needed; confirmed live).
   - `searchAlbums`: `202cb3305e31e5a0767ba7925f28bd728cf8f8b0217e6da43909056071cd70e9`
   - `searchPlaylists`: `d520014e748f9ea44f7707d8df1819867ac1205e8b7f3e28f22fe5fc858921b1`
   - `searchPodcasts`: `0195d9f61b43606d490bca64c3456e3593528cea6cc05c7e822c7c42beed0f4e`
-- Answer: `data.searchV2.<tracks|artists|albums|playlists>.items[]`, each item a
-  wrapper: `{__typename: "…ResponseWrapper", data: {…uri: "spotify:artist:…", …}}`.
+- Answer (ALL VERIFIED LIVE 2026-10-17; the per-type field names and wrapper
+  depth differ per type — surprising but consistent):
+  - `searchArtists` → `data.searchV2.artists.items[]` = `{__typename, data}`
+    **flat** (no `.item`): `data.uri`, `data.profile.name`. The field is
+    `artists`, NOT `artistsV2`.
+  - `searchAlbums` → `data.searchV2.albumsV2.items[]` = `{__typename, data}`
+    **flat**: `data.uri`, `data.name`, `data.artists.items[].profile.name`.
+  - `searchTracks` → `data.searchV2.tracksV2.items[]` = `{item: {data: …},
+    matchedFields}` — **extra `.item` level** only this type has:
+    `items[i].item.data.uri/.name/.albumOfTrack/.artists…`.
+  - `searchArtists`/`searchAlbums`/`searchTracks` hashes all answered 200
+    first-try (2026-10-17); 412 rotation is implemented in
+    `src/util/pathfinder.ts` but not yet exercised live.
+  So: per item use `items[i].data` (unwrap `.item` first for tracks).
   Note: free-text search only (drop Web API `field:"x"` filters).
 - Validated live with the plain OAuth token (no login5/client-token dance).
 
-### 5. Album / Artist / Track metadata — extended-metadata (source-verified; validate on first use)
+### 5. Album / Artist / Track metadata — extended-metadata (VALIDATED LIVE, 200, 2026-10-17)
 `POST /extended-metadata/v0/extended-metadata`
 - Headers: `Content-Type: application/x-protobuf` (Accept likewise).
 - Body: protobuf `spotify.extendedmetadata.BatchedEntityRequest`:
   `header: {country: <2-letter>, catalogue: "premium"}`, `entityRequest: [{entityUri,
   query: [{extensionKind}]}]`. Kinds: `ARTIST_V4 = 8`, `ALBUM_V4 = 9`, `TRACK_V4 = 10`.
+- **Validated live**: `country: 'AU'` static is accepted (open question 3 settled:
+  use a static country, `COUNTRY = 'AU'` in `src/util/spclient.ts`). Response
+  decodes as documented; the `google.protobuf.Any` payload is accessed on the
+  **raw decoded message via snake_case `type_url`/`value`** (NOT `typeUrl` —
+  verified live, `typeUrl` is undefined), and `value` is the encoded
+  `spotify.metadata.<Artist|Album|Track>` bytes.
 - Response `BatchedExtensionResponse.extendedMetadata[].extensionData[]`:
   each has `entityUri` + `extensionData` (a `google.protobuf.Any`) → decode as
   `spotify.metadata.Artist|Album|Track`.
+- `spotify.metadata.Track` (validated live): `name`, `artist[]` → `artist.name`
+  (camelCase as usual — only the Any fields keep snake_case), `album.name`,
+  `duration` (ms), `discNumber`.
 - Album view: `spotify.metadata.Album` → `discs[].tracks[]` for the track list,
   `coverGroup.images[].imageId` → cover URL `https://i.scdn.co/image/{imageId}`
   (this is what `get-image-colors` needs in `src/view/Album.tsx`).
@@ -192,6 +231,9 @@ Load once at startup: `protobuf.load(fs.readdirSync('proto', {recursive: true})
 
 ## Port plan (do in this order; each phase leaves the app runnable)
 
+> Live status/checklist lives in **`PLAN.md`** — keep progress there, this
+> section is just the shape of the work.
+
 - **Phase A — player state + devices** (`src/util/spclient.ts` new):
   base fetch helper (auto `refreshTokens()` on 401, retry once), observer PUT +
   Cluster decode, replace `PlayerStore.pollCurrentlyPlaying`/`fetchDevices` in
@@ -219,11 +261,16 @@ Load once at startup: `protobuf.load(fs.readdirSync('proto', {recursive: true})
    username). Options, in order: (a) try `username: "me"`, (b) use the
    no-username `browsePage` route for Home instead, (c) ask the user once at
    pairing and store in conf.
-2. **Transfer body casing** (§3): camelCase vs the fork's literal snake_case —
-   30-second live test settles it.
-3. **Country code** for extended-metadata header: derive from… simplest is a
-   static or from token scope; spotatui uses session country from login5. Start
-   with `AU`/`US`-style static or omit and see if it's accepted.
+   NOTE (validated live 2026-10-17): `context_metadata.context_owner` in a
+   connect-state cluster carried a numeric id (`"1231127656"`) — not a username;
+   option (c) or the username-less `browsePage` remain the way.
+2. ~~Transfer body casing~~ settled (2026-10-17, validated live): camelCase
+   `{"transferOptions": {"restorePaused": "resume"}}` → HTTP 200 + `ack_id`;
+   snake_case never needed (kept only as a fallback path in `transferPlayback`).
+3. **Country code for extended-metadata header**: SETTLED (validated live
+   2026-10-17) — a static `country: 'AU'` is accepted with HTTP 200. Hardcoded
+   as `COUNTRY = 'AU'` in `src/util/spclient.ts`; promote to a conf setting if
+   it ever matters.
 4. Pathfinder hash rotation is real (they rotate "every few months") — build the
    412 rotation in from day one, and when all hashes die, refresh from
    spotatui's `search.rs` (they keep it current).

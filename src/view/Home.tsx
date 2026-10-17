@@ -3,6 +3,7 @@ import spotify from '../util/spotify.js';
 import Router from '../util/router.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
+import logger from '../util/logger.js';
 import List from '../components/List.js';
 
 const useHomeData = createRequestHook({
@@ -23,7 +24,17 @@ export default function Home() {
     useEffect(() => {
         if (message.isEmpty) message.request();
     }, []);
-    if (message.isError) throw message.error;
+    if (message.isError) {
+        // api.spotify.com permanently 429s our client id; Home's port to the
+        // internal API is Phase E (see PLAN.md). Degrade gracefully instead of
+        // throwing — a dead Home view must not kill the whole TUI.
+        logger.error(message.error);
+        return (
+            <Text dim block>
+                Home is unavailable (port pending — see PLAN.md Phase E)
+            </Text>
+        );
+    }
     if (message.isEmpty || message.isFetching) return <Spinner color="white" />;
     const {short, medium, long} = message.data;
 

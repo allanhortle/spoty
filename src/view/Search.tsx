@@ -1,28 +1,23 @@
 import {Text, Input, useInput, Spinner} from 'react-curse';
-import spotify from '../util/spotify.js';
+import {searchAlbums, searchArtists} from '../util/pathfinder.js';
 import Router from '../util/router.js';
 import {useEffect, useState} from 'react';
 import {createRequestHook} from 'react-enty';
 import {useFocus} from '../util/focusContext.js';
+import logger from '../util/logger.js';
 import List from '../components/List.js';
 
 const useSearchData = createRequestHook({
     name: 'search',
     request: async ({query, type}: {query: string; type: 'album' | 'artist'}) => {
-        const {body} = await spotify.search(query, [type], {limit: 20});
-        const albums = (body.albums?.items || []).map(({name, type, uri, artists}) => ({
-            name,
-            type,
-            uri,
-            artist: artists.map((ii) => ii.name).join(', ')
-        }));
-        const artists = (body.artists?.items || []).map(({name, type, uri}) => ({
-            name,
-            type,
-            uri,
-            artist: name
-        }));
-        return [...artists, ...albums];
+        // Pathfinder search (port doc §4): free-text only — Web API
+        // field:"x" filters don't exist here.
+        if (type === 'album') {
+            return searchAlbums(query).then((albums) => albums);
+        }
+        return searchArtists(query).then((artists) =>
+            artists.map((artist) => ({...artist, artist: artist.name}))
+        );
     }
 });
 
@@ -52,7 +47,15 @@ export default function Search() {
         [query, type, focus, searchData.isSuccess]
     );
 
-    if (searchData.isError) throw searchData.error;
+    if (searchData.isError) {
+        // Same lesson as Home: a failed search must not kill the TUI.
+        logger.error(searchData.error);
+        return (
+            <Text dim block>
+                Search failed — try again (see ~/Library/Logs/spoty-nodejs/spoty.log)
+            </Text>
+        );
+    }
 
     return (
         <>

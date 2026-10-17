@@ -3,13 +3,14 @@
 A Spotify TUI (React 18 + `react-curse` + valtio + react-enty), TypeScript,
 compiled with `tsc` to `build/`, ESM, Node 24.
 
-## Read this first: `docs/spotify-port.md`
+## Read this first: `PLAN.md`, then `docs/spotify-port.md`
 
 The project is mid-port from Spotify's dead public Web API to Spotify's
 **internal endpoints** (`spclient.wg.spotify.com` + pathfinder), using
 spotatui's first-party auth (device pairing against Spotify's desktop client
-ID). **All endpoint specs, protobuf payloads, persisted query hashes, and the
-phased plan live in `docs/spotify-port.md` — use it, don't re-derive.**
+ID). **`PLAN.md` is the living status/checklist — read it, work the next phase,
+update it as you go.** All endpoint specs, protobuf payloads, persisted query
+hashes live in `docs/spotify-port.md` — use them, don't re-derive.
 
 Context-economy rules (a previous session burned its whole budget re-reading
 this material):
