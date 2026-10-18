@@ -191,3 +191,7 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   operations; `browsePage` (Made For You) stays as an unneeded alternative.
 - 2026-10-18 (Phase F): `spotify.ts` is pairing + token refresh only;
   every data call now goes through `spclient.ts`/`pathfinder.ts`.
+- 2026-10-18: recent/most-played stats probed live (port doc §9): no direct
+  endpoint on spclient; the data lives in the Made-For-You auto-playlists
+  (On Repeat / Repeat Rewind / daylist), reachable via browsePage + §6
+  playlist contents — a possible future Home add-on, not a port blocker.

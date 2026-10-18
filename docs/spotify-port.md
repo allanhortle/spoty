@@ -239,6 +239,39 @@ no login5 or client-token needed; confirmed live).
 ### 8. Lyrics (nice-to-have)
 `GET /color-lyrics/v2/track/{trackId}?format=json&vocalRemoval=false&market=from_token`
 
+### 9. Recent / most-played stats (probed live 2026-10-18)
+There is **no direct** top-artists/top-tracks/recently-played REST endpoint on
+spclient for our token — all classic candidates 404 (don't re-probe):
+`/toplist/v1/{me,spotify,bogus}/top/{tracks,artists}[.lastmonth]`,
+`/toplist/v2/...`, `/recently-played/v1|v2/...`, `/play-history/v1/...`,
+`/listening-history/v1/...`, `/playlist/v2/rootlist[/{user}]` (404 even with
+trailing slash), `/user-top/v1/...`. The web player's home "Recently played"
+comes from pathfinder operations whose hashes we don't have (they'd have to be
+pulled from the web player bundle — not from spotatui's search.rs).
+
+What DOES work: the same data as Spotify's auto-maintained **Made For You
+playlists**, all reachable with what we already have:
+- pathfinder `browsePage` (hash in §7) with uri
+  `spotify:page:0JQ5DAt0tbjZptfcdMSKl3` → `data.browse.sections[].
+  sectionItems.items[].content.data.{name,uri}` (note: `data.browse`, NOT
+  `data.browsePage`; section titles at `data.title.transformedLabel`).
+- "Uniquely yours" section (validated live):
+  - **On Repeat** `spotify:playlist:37i9dQZF1EpptO20Ypcrhi` — your 30
+    most-played tracks (rolling ~30 days)
+  - **Repeat Rewind** `spotify:playlist:37i9dQZF1EpPDpKNGUYgYQ` — previous
+    cycle's repeats
+  - **daylist** `spotify:playlist:37i9dQZF1EP6YuccBxUcC1` — 50 tracks themed
+    on your recent listening (e.g. "space rock psychedelic sunday night",
+    description references what you listened to)
+  - **DJ** `spotify:playlist:37i9dQZF1EYkqdzj48dyYq` (AI DJ stream)
+- Playlist contents: §6 with `decorate=revision,attributes,length,owner,items`
+  → `contents.items[].uri` (+ `length`); then names via a batched TRACK_V4
+  POST (Phase D pattern).
+- The genre/artist/decade/mood mix sections on the same page are
+  listening-derived too, if a Home revamp ever wants more.
+- `spotify:page:home` via `browsePage` → 200 but **empty sections** (the real
+  home page uses a different/unknown operation).
+
 ## Vendored protobufs (`proto/`, loads via `protobufjs` — verified)
 
 `connect.proto, player.proto, devices.proto, media.proto, metadata.proto,
