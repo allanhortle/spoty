@@ -26,7 +26,6 @@
     "react-dom": "^18.2.0",
     "react-enty": "^2.0.0",
     "react-reconciler": "^0.29.0",
-    "spotify-web-api-node": "^5.0.2",
     "swr": "^2.2.4",
     "valtio": "1.4.0",
     "winston": "^3.8.2",
@@ -36,8 +35,6 @@
     "@types/lodash": "^4.14.188",
     "@types/node": "^24.0.0",
     "@types/react": "^18.0.24",
-    "@types/spotify-api": "^0.0.19",
-    "@types/spotify-web-api-node": "^5.0.7",
     "prettier": "^2.7.1",
     "typescript": "^5.3.3"
   }

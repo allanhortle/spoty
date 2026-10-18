@@ -205,17 +205,25 @@ export type TrackInfo = {name: string; artists: string[]; albumName: string; dur
 
 const trackCache = new Map<string, TrackInfo | null>();
 
-export async function fetchTrack(uri: string): Promise<TrackInfo | null> {
-    if (trackCache.has(uri)) return trackCache.get(uri) ?? null;
+// One POST, any number of entity requests — the endpoint is batch by design
+// (port doc §5). Each entry: {entityUri, extensionKind}.
+export type EntityRequest = {entityUri: string; extensionKind: number};
 
+export const EXTENSION_KIND = {ARTIST_V4: 8, ALBUM_V4: 9, TRACK_V4: 10} as const;
+
+async function extendedMetadata(requests: EntityRequest[]): Promise<
+    {entityUri: string; typeName: string; value: Uint8Array}[]
+> {
     const root = await protos;
     const Request = root.lookupType('spotify.extendedmetadata.BatchedEntityRequest');
     const Response = root.lookupType('spotify.extendedmetadata.BatchedExtensionResponse');
-    const Track = root.lookupType('spotify.metadata.Track');
 
     const payload = Request.create({
         header: {country: COUNTRY, catalogue: 'premium'},
-        entityRequest: [{entityUri: uri, query: [{extensionKind: 10 /* TRACK_V4 */}]}]
+        entityRequest: requests.map(({entityUri, extensionKind}) => ({
+            entityUri,
+            query: [{extensionKind}]
+        }))
     });
 
     const url = '/extended-metadata/v0/extended-metadata';
@@ -229,28 +237,340 @@ export async function fetchTrack(uri: string): Promise<TrackInfo | null> {
     }
 
     const decoded = Response.decode(new Uint8Array(await response.arrayBuffer()));
-    let info: TrackInfo | null = null;
+    // The Any payload is accessed on the raw decoded message via snake_case
+    // type_url/value (validated live — typeUrl is undefined).
+    const out: {entityUri: string; typeName: string; value: Uint8Array}[] = [];
     for (const array of decoded.extendedMetadata ?? []) {
         for (const data of array.extensionData ?? []) {
-            if (data.entityUri !== uri) continue;
             const any = data.extensionData as unknown as {type_url?: string; value?: Uint8Array};
             if (!any.value) continue;
-            const track = Track.decode(any.value).toJSON() as {
-                name?: string;
-                artist?: {name?: string}[];
-                album?: {name?: string};
-                duration?: unknown;
-            };
-            info = {
-                name: track.name ?? '',
-                artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
-                albumName: track.album?.name ?? '',
-                durationMs: num(track.duration)
-            };
+            // type_url is like "type.googleapis.com/spotify.metadata.TrackV4" —
+            // take the message name so the caller picks the decoder.
+            const typeName = (any.type_url ?? '').split('/').pop() ?? '';
+            out.push({entityUri: data.entityUri, typeName, value: any.value});
         }
     }
+    return out;
+}
+
+export async function fetchTrack(uri: string): Promise<TrackInfo | null> {
+    if (trackCache.has(uri)) return trackCache.get(uri) ?? null;
+
+    const root = await protos;
+    const Track = root.lookupType('spotify.metadata.Track');
+    const [entry] = await extendedMetadata([{entityUri: uri, extensionKind: EXTENSION_KIND.TRACK_V4}]);
+    if (!entry || entry.entityUri !== uri) {
+        trackCache.set(uri, null);
+        return null;
+    }
+    const track = Track.decode(entry.value).toJSON() as {
+        name?: string;
+        artist?: {name?: string}[];
+        album?: {name?: string};
+        duration?: unknown;
+    };
+    const info: TrackInfo = {
+        name: track.name ?? '',
+        artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
+        albumName: track.album?.name ?? '',
+        durationMs: num(track.duration)
+    };
     trackCache.set(uri, info);
     return info;
+}
+
+// ── ids: 16-byte gid (base64 after toJSON) ↔ 22-char base62 id ───────────────
+const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+export function gidToId(gid: string): string {
+    let n = 0n;
+    for (const byte of Buffer.from(gid, 'base64')) n = (n << 8n) | BigInt(byte);
+    let id = '';
+    while (n > 0n) {
+        id = BASE62[Number(n % 62n)] + id;
+        n /= 62n;
+    }
+    return id.padStart(22, '0');
+}
+
+export function idToGid(id: string): string {
+    let n = 0n;
+    for (const char of id) n = n * 62n + BigInt(BASE62.indexOf(char));
+    const bytes = new Uint8Array(16);
+    for (let i = 15; i >= 0; i--) {
+        bytes[i] = Number(n & 0xffn);
+        n >>= 8n;
+    }
+    return Buffer.from(bytes).toString('base64');
+}
+
+// ── album / artist metadata (port doc §5) ────────────────────────────────
+// Live-validated shapes (2026-10-18): ALBUM_V4's disc tracks are **gid-only**
+// and carry no coverGroup — full track data (name/artist/duration, plus the
+// embedded album with coverGroup) comes from TRACK_V4; ARTIST_V4's groups are
+// also gid-only, full album data from ALBUM_V4. Both views batch the second
+// request in ONE extended-metadata POST. toJSON keys are camelCase (only the
+// Any type_url/value stay snake_case).
+
+export type AlbumTrack = {
+    index: number; // overall position across discs (play offset)
+    number: number; // printed track_number
+    disc: number;
+    name: string;
+    artists: string[]; // features only (album artists already filtered)
+    explicit: boolean;
+    durationMs: number;
+    uri: string;
+    id: string; // base62, matches PlayerStore.id
+};
+
+export type AlbumInfo = {
+    uri: string;
+    name: string;
+    artists: string[];
+    year: number;
+    tracks: AlbumTrack[];
+    coverUrl: string | null; // https://i.scdn.co/image/<hex fileId> for get-image-colors
+};
+
+const albumCache = new Map<string, AlbumInfo | null>();
+
+export async function fetchAlbum(uri: string): Promise<AlbumInfo | null> {
+    if (albumCache.has(uri)) return albumCache.get(uri) ?? null;
+
+    const root = await protos;
+    const Album = root.lookupType('spotify.metadata.Album');
+    const Track = root.lookupType('spotify.metadata.Track');
+    const [entry] = await extendedMetadata([
+        {entityUri: uri, extensionKind: EXTENSION_KIND.ALBUM_V4}
+    ]);
+    if (!entry || entry.entityUri !== uri) {
+        albumCache.set(uri, null);
+        return null;
+    }
+    const album = Album.decode(entry.value).toJSON() as {
+        name?: string;
+        artist?: {gid?: string; name?: string}[];
+        date?: {year?: unknown};
+        disc?: {track?: {gid?: string}[]}[];
+    };
+
+    // disc tracks are gid-only — batch TRACK_V4 for every one of them.
+    const trackUris = (album.disc ?? [])
+        .flatMap((disc) => (disc.track ?? []).map((track) => track.gid ?? ''))
+        .filter(Boolean)
+        .map((gid) => `spotify:track:${gidToId(gid)}`);
+    const trackEntries = trackUris.length
+        ? await extendedMetadata(
+              trackUris.map((trackUri) => ({
+                  entityUri: trackUri,
+                  extensionKind: EXTENSION_KIND.TRACK_V4
+              }))
+          )
+        : [];
+    const trackByUri = new Map(trackEntries.map((entry) => [entry.entityUri, entry]));
+
+    const artistGids = new Set((album.artist ?? []).map((artist) => artist.gid ?? ''));
+    const tracks: AlbumTrack[] = [];
+    let index = 0;
+    let coverUrl: string | null = null;
+    for (const trackUri of trackUris) {
+        const t = trackByUri.get(trackUri);
+        if (!t) continue;
+        const track = Track.decode(t.value).toJSON() as {
+            number?: unknown;
+            discNumber?: unknown;
+            name?: string;
+            artist?: {gid?: string; name?: string}[];
+            explicit?: unknown;
+            duration?: unknown;
+            album?: {coverGroup?: {image?: {fileId?: string; width?: unknown}[]}};
+        };
+        if (!coverUrl) {
+            // The cover lives on the track's embedded album (ALBUM_V4 has
+            // none). Largest image wins; the URL is the hex of the fileId
+            // bytes (base64 form 404s — validated live).
+            const images = (track.album?.coverGroup?.image ?? [])
+                .slice()
+                .sort((a, b) => num(b.width) - num(a.width));
+            const fileId = images[0]?.fileId;
+            if (fileId) {
+                coverUrl = `https://i.scdn.co/image/${Buffer.from(fileId, 'base64').toString('hex')}`;
+            }
+        }
+        tracks.push({
+            index: index++,
+            number: num(track.number),
+            disc: num(track.discNumber),
+            name: track.name ?? '',
+            artists: (track.artist ?? [])
+                .filter((artist) => artist.gid && !artistGids.has(artist.gid))
+                .map((artist) => artist.name ?? '')
+                .filter(Boolean),
+            explicit: !!track.explicit,
+            durationMs: num(track.duration),
+            uri: trackUri,
+            id: trackUri.slice('spotify:track:'.length)
+        });
+    }
+
+    const info: AlbumInfo = {
+        uri,
+        name: album.name ?? '',
+        artists: (album.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
+        year: num(album.date?.year),
+        tracks,
+        coverUrl
+    };
+    albumCache.set(uri, info);
+    return info;
+}
+
+export type ArtistAlbum = {
+    name: string;
+    uri: string;
+    year: number;
+    trackCount: number;
+    type: 'album' | 'single';
+};
+
+export type ArtistInfo = {
+    uri: string;
+    name: string;
+    albums: ArtistAlbum[]; // albums first, then singles
+    singlesStart: number;
+};
+
+const artistCache = new Map<string, ArtistInfo | null>();
+
+export async function fetchArtist(uri: string): Promise<ArtistInfo | null> {
+    if (artistCache.has(uri)) return artistCache.get(uri) ?? null;
+
+    const root = await protos;
+    const Artist = root.lookupType('spotify.metadata.Artist');
+    const Album = root.lookupType('spotify.metadata.Album');
+    const [entry] = await extendedMetadata([
+        {entityUri: uri, extensionKind: EXTENSION_KIND.ARTIST_V4}
+    ]);
+    if (!entry || entry.entityUri !== uri) {
+        artistCache.set(uri, null);
+        return null;
+    }
+    const artist = Artist.decode(entry.value).toJSON() as {
+        name?: string;
+        albumGroup?: {album?: {gid?: string}[]}[];
+        singleGroup?: {album?: {gid?: string}[]}[];
+    };
+
+    // Groups are gid-only — batch ALBUM_V4 for every album (name/year/track
+    // count all come from the album payload).
+    const groups: [type: 'album' | 'single', albums: {gid?: string}[]][] = [
+        ['album', (artist.albumGroup ?? []).flatMap((group) => group.album ?? [])],
+        ['single', (artist.singleGroup ?? []).flatMap((group) => group.album ?? [])]
+    ];
+    const albumUris = groups
+        .flatMap(([, albums]) => albums.map((album) => album.gid ?? ''))
+        .filter(Boolean)
+        .map((gid) => `spotify:album:${gidToId(gid)}`);
+    const albumEntries = albumUris.length
+        ? await extendedMetadata(
+              albumUris.map((albumUri) => ({
+                  entityUri: albumUri,
+                  extensionKind: EXTENSION_KIND.ALBUM_V4
+              }))
+          )
+        : [];
+    const albumByUri = new Map(albumEntries.map((entry) => [entry.entityUri, entry]));
+
+    const albums: ArtistAlbum[] = [];
+    let singlesStart = 0;
+    for (const [type, groupAlbums] of groups) {
+        if (type === 'single') singlesStart = albums.length;
+        for (const groupAlbum of groupAlbums) {
+            if (!groupAlbum.gid) continue;
+            const albumUri = `spotify:album:${gidToId(groupAlbum.gid)}`;
+            const a = albumByUri.get(albumUri);
+            if (!a) continue;
+            const album = Album.decode(a.value).toJSON() as {
+                name?: string;
+                date?: {year?: unknown};
+                disc?: {track?: unknown[]}[];
+            };
+            albums.push({
+                name: album.name ?? '',
+                uri: albumUri,
+                year: num(album.date?.year),
+                trackCount: (album.disc ?? []).reduce(
+                    (sum, disc) => sum + (disc.track?.length ?? 0),
+                    0
+                ),
+                type
+            });
+        }
+    }
+
+    const info: ArtistInfo = {uri, name: artist.name ?? '', albums, singlesStart};
+    artistCache.set(uri, info);
+    return info;
+}
+
+// ── library: followed artists (port doc §7) ─────────────────────────
+// VALIDATED LIVE 2026-10-18 (settles the old username question):
+// - URL needs the trailing slash — /collection/v2/paging (no slash) 404s.
+// - PageRequest.username can be ANY non-empty string ('bogus' returned the
+//   token user's own artists; empty → HTTP 500) — the server identifies the
+//   user from the token, so we pass 'me'.
+// - set 'artist' → followed artists; set 'collection' → 403 for our scopes.
+export type FollowedArtist = {name: string; uri: string};
+
+export async function fetchFollowedArtists(): Promise<FollowedArtist[]> {
+    const root = await protos;
+    const PageRequest = root.lookupType('spotify.collection.proto.v2.PageRequest');
+    const PageResponse = root.lookupType('spotify.collection.proto.v2.PageResponse');
+    const Artist = root.lookupType('spotify.metadata.Artist');
+
+    const payload = PageRequest.create({
+        username: 'me',
+        set: 'artist',
+        paginationToken: '',
+        limit: 300
+    });
+    const url = '/collection/v2/paging/';
+    const response = await spFetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/vnd.collection-v2.spotify.proto',
+            Accept: 'application/vnd.collection-v2.spotify.proto'
+        },
+        body: PageRequest.encode(payload).finish()
+    });
+    if (!response.ok) {
+        throw new SpError(response.status, await response.text(), url);
+    }
+
+    const decoded = PageResponse.decode(new Uint8Array(await response.arrayBuffer()));
+    const uris: string[] = (decoded.toJSON().items ?? [])
+        .filter((item: {uri?: string; isRemoved?: boolean}) => item.uri && !item.isRemoved)
+        .map((item: {uri: string}) => item.uri)
+        .filter((uri: string) => uri.startsWith('spotify:artist:'));
+
+    // Collection items are uri-only — names come from a batched ARTIST_V4
+    // request (one POST for every artist).
+    const entries = uris.length
+        ? await extendedMetadata(
+              uris.map((uri) => ({entityUri: uri, extensionKind: EXTENSION_KIND.ARTIST_V4}))
+          )
+        : [];
+    const byUri = new Map(entries.map((entry) => [entry.entityUri, entry]));
+
+    const artists: FollowedArtist[] = [];
+    for (const uri of uris) {
+        const entry = byUri.get(uri);
+        if (!entry) continue;
+        const artist = Artist.decode(entry.value).toJSON() as {name?: string};
+        artists.push({name: artist.name ?? uri, uri});
+    }
+    return artists;
 }
 
 // ── playback commands (port doc §2) ─────────────────────────────

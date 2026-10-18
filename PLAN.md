@@ -16,7 +16,7 @@ Spotify's internal endpoints (`spclient.wg.spotify.com` + pathfinder), exactly
 like spotatui does. Full validated endpoint specs, payloads, protobuf message
 names, and persisted query hashes: **`docs/spotify-port.md`**.
 
-## Status: Phases A+B complete — Phase C next
+## Status: Port complete (Phases A–F) — 2026-10-18
 
 ### Done ✅
 - [x] Node 18 → 24 (`.node-version`, `engines`, `@types/node`); `yarn tsc` clean
@@ -67,23 +67,67 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
       - pty smoke: space-key playPause doesn't crash the TUI.
 
 ### TODO — in order; each phase leaves the app runnable
-- [ ] **Phase C — search**: `src/util/pathfinder.ts`, hash table + 412
-      rotation; adapt `src/view/Search.tsx` to wrapper shape. (Port doc §4 —
-      note: answer shape is `data.searchV2.tracksV2.items[].item.data`, not
-      `items[].data` — verified live 2026-10-17; fix this in port doc §4 when
-      adapting.)
-- [ ] **Phase D — album/artist views**: extended-metadata batching; Album via
-      discs→tracks + `coverGroup` image URLs for `get-image-colors`; Artist via
-      album groups. (`fetchTrack` in `spclient.ts` is the pattern — reuse it.)
-- [ ] **Phase E — home**: followed artists via `collection/v2/paging`
-      (username problem — port doc §7) or Made-For-You `browsePage`.
-- [ ] **Phase F — cleanup**: remove `spotify-web-api-node`, `@types/spotify-api`,
-      `@types/spotify-web-api-node`, Web API types in `src/util/spotify.ts`;
-      README; final commit.
+- [x] **Phase C — search** (2026-10-18, validated live through the TUI in a pty):
+      - `src/util/pathfinder.ts` (committed in `92cb599`): `pathfinderQuery` with
+      the hash table + HTTP-412 rotation (`searchDesktop` fallback + per-type
+      hashes), `searchArtists` (field `artists`, flat items, name at
+      `data.profile.name`) and `searchAlbums` (field `albumsV2`, flat items,
+      artist names at `data.artists.items[].profile.name`).
+      - `Search.tsx` rewired to `searchArtists`/`searchAlbums`; errors degrade to
+      a dim message (don't kill the TUI); free-text only (Web API field filters
+      gone). Answer shape from port doc §4 confirmed live again today.
+      - Live validation: direct node test (Radiohead → 5 artists incl. correct
+      uri; In Rainbows → 5 albums with artist names) + pty smoke test with both
+      rounds (artist query, tab, album query) rendering results.
+- [x] **Phase D — album/artist views** (2026-10-18, validated live, pty
+      smoke passed end-to-end):
+      - `spclient.ts`: `extendedMetadata()` shared batch helper (any number of
+      `{entityUri, extensionKind}` in ONE POST); `gidToId`/`idToGid`
+      (16-byte gid ↔ 22-char base62, validated against search uris);
+      `fetchAlbum` (ALBUM_V4 → gid-only disc tracks → batch TRACK_V4 →
+      full tracks + cover from the track's embedded album `coverGroup`);
+      `fetchArtist` (ARTIST_V4 → gid-only groups → batch ALBUM_V4 → name/year/
+      track count). All cached in-memory.
+      - **Port doc §5 corrected** (live-validated): ALBUM_V4 disc tracks and
+      ARTIST_V4 groups are **gid-only**; toJSON keys are camelCase
+      (`albumGroup`, not `album_group`); cover URL is `https://i.scdn.co/image/
+      <hex of fileId bytes>` (raw base64 404s); the cover lives on the
+      **track's** embedded album, not ALBUM_V4 (which has no coverGroup).
+      - `Album.tsx`/`Artist.tsx` rewired to `fetchAlbum`/`fetchArtist` with
+      feature-filtering via album-artist gids; errors degrade to a dim
+      message (was `throw`); the old `spotify-web-api-node` calls are gone
+      from both views.
+      - pty smoke: artist view (Radiohead, 15 albums + 32 singles, Albums/
+      Singles labels at the right rows) → down×6 → Enter on In Rainbows →
+      album view renders with **true-color cover colors** (getColors on the
+      hex URL) and the full track list with correct durations; direct
+      album boot also renders.
+- [x] **Phase E — home** (2026-10-18, validated live + pty smoke passed):
+      - `spclient.ts`: `fetchFollowedArtists()` — `POST /collection/v2/paging/`
+      (trailing slash required, no-slash 404s) with PageRequest
+      `{username: 'me', set: 'artist', paginationToken: '', limit: 300}` →
+      183 followed artists in ONE page; uri-only items → names via one
+      batched ARTIST_V4 POST.
+      - **Open question 1 closed (live)**: `username` can be ANY non-empty
+      string — the server identifies the user from the token ('bogus' →
+      our own artists; empty → 500; the numeric `context_owner` hint was a
+      red herring). Port doc §7 updated.
+      - `Home.tsx`: shows the Followed Artists list (the old Web API
+      "top artists short/medium/long" isn't reachable from spclient with
+      known operations — followed artists is the closest port).
+      - pty smoke: Home renders the 183-artist list; Enter drills into the
+      artist view with Albums/Singles all correct.
+- [x] **Phase F — cleanup** (2026-10-18): removed `spotify-web-api-node`,
+      `@types/spotify-api`, `@types/spotify-web-api-node` deps; `spotify.ts` is
+      now pairing/refresh only (no Web API client, no `SpotifyApi.*` types,
+      no default export); README's home-screen line updated; `yarn tsc` clean;
+      home + search pty smokes re-run green after the removal.
 
 ## Open questions (settle during the phase they block, write answers back here)
-1. ~~Username for `collection/v2/paging`~~ (Phase E) — options in port doc;
-   live hint: `context_metadata.context_owner` is a numeric id, not a username.
+1. ~~Username for `collection/v2/paging`~~ settled (2026-10-18, validated live):
+   ANY non-empty string works — the server identifies the user from the token
+   (spoty passes `'me'`). The trailing slash on the URL was the real blocker
+   (no-slash 404s). Port doc §7 has the full spec.
 2. ~~Transfer body casing~~ settled (2026-10-17, validated live): camelCase
    `{"transferOptions": {"restorePaused": "resume"}}` → HTTP 200 + `ack_id`;
    snake_case never needed (kept only as a fallback path in `transferPlayback`).
@@ -95,6 +139,11 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
 ## Hard-won testing notes (don't rediscover these)
 - react-curse renders **nothing at terminal size 0×0** — pty tests must set the
   window size before spawn; no-TTY pipes crash in its screen buffer.
+- react-curse `Input` **drops all but the first char of a multi-char stdin
+  chunk** (queue-drained chunks carry no `raw` and Input's handler bails on
+  `raw === undefined`) — pty tests must send **one keystroke per write**
+  (`foreach c [split $s ""] { send -- $c; after 60 }`), not whole strings.
+  Human typing (one key per data event) is unaffected.
 - `api.spotify.com` 429 for our client is **permanent, not volume-based**.
 - Access token ~1h → `refreshTokens()` before any API work.
 - Log first when debugging: `~/Library/Logs/spoty-nodejs/spoty.log`.
@@ -122,3 +171,23 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   semantic errors, not auth failures — log them, don't back off like 429.
 - 2026-10-17 (Phase B): transfer body camelCase settled live; snake_case kept
   as remembered-fallback only.
+- 2026-10-18 (Phase C): pty testing must send one keystroke per write —
+  react-curse `Input` drops all but the first char of a multi-char stdin
+  chunk (queue-drained chunks carry no `raw`); see hard-won testing notes.
+- 2026-10-18 (Phase D): extended-metadata responses are **partial by design** —
+  ALBUM_V4/ARTIST_V4 return gid-only sub-entities, so album/artist views are
+  two-step: one V4 request for the skeleton, one **batched** request for every
+  gid (the endpoint takes any number of entityRequests in one POST).
+- 2026-10-18 (Phase D): the album cover is NOT in ALBUM_V4 — it rides on the
+  track's embedded album (`Track.album.coverGroup`); URL = hex of the fileId
+  bytes (base64 form 404s).
+- 2026-10-18 (Phase D): Album/Artist views degrade to a dim message on fetch
+  error (was `throw` — a 429 there used to kill the whole TUI).
+- 2026-10-18 (Phase E): `collection/v2/paging/` needs the trailing slash, and
+  `PageRequest.username` can be any non-empty string (token identifies the
+  user) — the username hunt was a red herring.
+- 2026-10-18 (Phase E): Home now lists followed artists (183, one page) —
+  "top artists" is not reachable via spclient/pathfinder with known
+  operations; `browsePage` (Made For You) stays as an unneeded alternative.
+- 2026-10-18 (Phase F): `spotify.ts` is pairing + token refresh only;
+  every data call now goes through `spclient.ts`/`pathfinder.ts`.

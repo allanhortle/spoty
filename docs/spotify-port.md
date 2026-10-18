@@ -185,29 +185,56 @@ no login5 or client-token needed; confirmed live).
 - `spotify.metadata.Track` (validated live): `name`, `artist[]` → `artist.name`
   (camelCase as usual — only the Any fields keep snake_case), `album.name`,
   `duration` (ms), `discNumber`.
-- Album view: `spotify.metadata.Album` → `discs[].tracks[]` for the track list,
-  `coverGroup.images[].imageId` → cover URL `https://i.scdn.co/image/{imageId}`
-  (this is what `get-image-colors` needs in `src/view/Album.tsx`).
-- Artist view: `spotify.metadata.Artist` → `albums/singles/compilations`
-  (`AlbumGroup` with `items[]`).
+- Album view (ALL VALIDATED LIVE 2026-10-18, Phase D — the 2026-10-17 sketch
+  above was wrong): `ALBUM_V4` → `Album.name`, `artist[].{gid,name}`,
+  `date.year`, `disc[].track[]` — but disc tracks are **gid-only** (no
+  name/artist/duration) and `Album` has **no coverGroup**. So: batch `TRACK_V4`
+  for every disc-track gid in ONE extended-metadata POST (the endpoint is
+  batch by design) — each returns full track data **plus the embedded album
+  with `coverGroup.image[].{fileId,width}`**. The cover URL is
+  `https://i.scdn.co/image/<hex of fileId bytes>` — the raw base64 fileId
+  404s (validated live both ways). Take the largest image by width. This is
+  what `get-image-colors` needs in `src/view/Album.tsx`.
+- Artist view (validated live 2026-10-18): `ARTIST_V4` → `Artist.name`,
+  `albumGroup[]`/`singleGroup[]` (camelCase in toJSON!) — but each
+  `group[].album[]` entry is **gid-only** too. Batch `ALBUM_V4` for every
+  album gid in ONE POST → `name`, `date.year`, track count =
+  `disc[].track[].length`. (`appearsOnGroup`/`compilationGroup` exist too;
+  view shows albums + singles only.)
+- gid ↔ id: entity gids are 16 raw bytes (base64 after toJSON); Spotify's
+  22-char base62 id is base62 of the big-endian 128-bit int, left-padded with
+  `0` to 22 chars (`gidToId`/`idToGid` in `src/util/spclient.ts` — validated
+  live against known uris from search).
 
 ### 6. Playlist contents (validated live, 200, plain JSON)
 `GET /playlist/v2/playlist/{id}?decorate=revision,attributes,length,owner`
 
-### 7. Library / followed artists (source-verified; blocked on username — see open questions)
-`POST /collection/v2/paging` (batch)
+### 7. Library / followed artists (VALIDATED LIVE, 200, 2026-10-18 — Phase E)
+`POST /collection/v2/paging/` (batch)
+- **The trailing slash is required** — `/collection/v2/paging` (no slash) 404s.
 - Headers: `Content-Type: application/vnd.collection-v2.spotify.proto` (both
-  Content-Type **and** Accept in spotatui).
+  Content-Type **and** Accept).
 - Body: protobuf `spotify.collection.proto.v2.PageRequest`
   `{username, set, paginationToken: "", limit: 300}`.
   Sets: `collection` (track/album), `artist` (followed artists), `show`, `listenlater`.
-- Response: `spotify.collection.proto.v2.PageResponse` → `items[]
-  {uri, addedAt, isRemoved}` (+ pagination token). Cap pagination at ~200 pages.
+- **Username settled (open question 1 closed)**: it can be ANY non-empty string
+  (we pass `'me'`) — the server identifies the user from the token. Validated
+  live: `'bogus'` returned the token user's own collection; empty string →
+  HTTP 500; the old `context_owner` numeric-id hint was a red herring.
+- set `'artist'` works with our scopes (183 followed artists in ONE page,
+  `nextPageToken` empty); set `'collection'` → HTTP 403 for our token's
+  scopes (untested further — not needed).
+- Response `spotify.collection.proto.v2.PageResponse` → `items[]
+  {uri, addedAt, isRemoved}` (camelCase in toJSON). Items are uri-only — names
+  come from a batched ARTIST_V4 request (one POST for all 183).
+- Cap pagination at ~200 pages (`nextPageToken` → next request's
+  `paginationToken`).
 - Home alternative that needs **no username**: pathfinder `browsePage`
   (`variables: {uri: "spotify:page:0JQ5DAt0tbjZptfcdMSKl3" (Made For You),
   pagePagination/sectionPagination {offset, limit}, browseEndUserIntegration:
   "INTEGRATION_WEB_PLAYER", includeEpisodeContentRatingsV2: false}`), hash
   `f5c4e6d668f5716464a231c1cc8b22c1cbf6ad68b09929fd7de813a30581298b`.
+  Not needed since §7 above works.
 
 ### 8. Lyrics (nice-to-have)
 `GET /color-lyrics/v2/track/{trackId}?format=json&vocalRemoval=false&market=from_token`
@@ -280,6 +307,10 @@ Load once at startup: `protobuf.load(fs.readdirSync('proto', {recursive: true})
 - react-curse renders nothing if the terminal has size 0×0 — testing under
   `expect`/pty requires setting the window size before spawn. A no-TTY pipe
   crashes in `react-curse`'s screen buffer on every Node version.
+- react-curse `Input` processes only the **first char of each stdin data
+  chunk** (queued chars are re-emitted with no `raw` arg and Input bails on
+  `raw === undefined`) — pty tests must send one keystroke per write
+  (`foreach c [split $s ""] { send -- $c; after 60 }`), not whole strings.
 - Spotify desktop must be running for playback-state/command validation.
 - 429s from `api.spotify.com` for the first-party client are **permanent**,
   not volume-based — if you see one, the call is on the wrong host.

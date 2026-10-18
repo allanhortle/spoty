@@ -1,5 +1,3 @@
-/// <reference types="spotify-api" />
-import SpotifyWebApi from 'spotify-web-api-node';
 import storage from './storage.js';
 
 export type Tokens = {
@@ -30,8 +28,6 @@ const scopes = [
     'playlist-read-collaborative',
     'playlist-read-private'
 ];
-
-const api = new SpotifyWebApi({clientId});
 
 export type Pairing = {
     deviceCode: string;
@@ -88,17 +84,8 @@ export async function pollForPairing(deviceCode: string, interval = 5): Promise<
 }
 
 export function saveTokens(tokens: Tokens) {
-    api.setAccessToken(tokens.access_token);
-    api.setRefreshToken(tokens.refresh_token);
     storage.set('tokenTTL', Date.now() + tokens.expires_in * 1000);
     return storage.set('tokens', tokens);
-}
-
-export function getTokens() {
-    const tokens = storage.get('tokens');
-    api.setAccessToken(tokens.access_token);
-    api.setRefreshToken(tokens.refresh_token);
-    return tokens;
 }
 
 export async function refreshTokens() {
@@ -130,11 +117,3 @@ export async function refreshTokens() {
     }
     saveTokens(response);
 }
-
-export default api;
-
-export type Album = SpotifyApi.AlbumObjectFull;
-export type AlbumSimple = SpotifyApi.AlbumObjectSimplified;
-export type Artist = SpotifyApi.ArtistObjectFull;
-export type ArtistSimple = SpotifyApi.ArtistObjectSimplified;
-export type Track = SpotifyApi.TrackObjectSimplified;

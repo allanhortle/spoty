@@ -1,18 +1,17 @@
 import {useChildrenSize, Spinner, Text} from 'react-curse';
-import spotify from '../util/spotify.js';
+import {fetchArtist, ArtistInfo} from '../util/spclient.js';
 import {createRequestHook} from 'react-enty';
 import {useEffect} from 'react';
+import logger from '../util/logger.js';
 import Router from '../util/router.js';
 import List from '../components/List.js';
 
 const useArtistData = createRequestHook({
     name: 'useArtistData',
     request: async (id: string) => {
-        const {body} = await spotify.getArtistAlbums(id, {limit: 50});
-        return {
-            albums: body.items,
-            artist: body.items[0].artists[0]
-        };
+        const artist = await fetchArtist(`spotify:artist:${id}`);
+        if (!artist) throw new Error('Artist not found');
+        return {artist};
     }
 });
 
@@ -22,11 +21,18 @@ export default function Artist(props: {id: string}) {
         if (message.isEmpty) message.request(props.id);
     }, [props.id]);
 
-    if (message.isError) throw message.error;
+    // Same lesson as Search/Home: a failed fetch must not kill the TUI.
+    if (message.isError) {
+        logger.error(message.error);
+        return (
+            <Text dim block>
+                Artist failed — try again (see ~/Library/Logs/spoty-nodejs/spoty.log)
+            </Text>
+        );
+    }
     if (message.isEmpty || message.isPending) return <Spinner color="white" />;
-    const singleIndex = message.data.albums.findIndex((x) => x.album_type === 'single');
 
-    const {albums, artist} = message.data;
+    const {artist} = message.data as {artist: ArtistInfo};
     return (
         <>
             <Text bold block height={2}>
@@ -36,17 +42,18 @@ export default function Artist(props: {id: string}) {
                 <Text dim block>
                     Albums
                 </Text>
-                <Text dim y={singleIndex}>
+                <Text dim y={artist.singlesStart}>
                     Singles
                 </Text>
                 <Text x={8} y={0}>
                     <List
-                        data={albums}
+                        data={artist.albums}
                         onChange={(next) => Router.push(next.uri)}
                         renderItem={(item) => {
-                            const {name, total_tracks, release_date} = item;
-                            const date = release_date.split('-')[0];
-                            const details = `${total_tracks} tracks • ${date}`;
+                            const {name, year, trackCount} = item as ArtistInfo['albums'][number];
+                            const details = year
+                                ? `${trackCount} tracks • ${year}`
+                                : `${trackCount} tracks`;
                             return (
                                 <>
                                     <Text>{name}</Text>

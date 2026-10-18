@@ -1,6 +1,5 @@
 import {ListTable, Text, useChildrenSize} from 'react-curse';
-import spotify from '../util/spotify.js';
-import type {Album} from '../util/spotify.js';
+import {fetchAlbum, AlbumInfo} from '../util/spclient.js';
 import timeToString from '../util/timeToString.js';
 import {createRequestHook} from 'react-enty';
 import {useEffect} from 'react';
@@ -12,9 +11,12 @@ import getColors from 'get-image-colors';
 const useAlbumData = createRequestHook({
     name: 'useAlbumData',
     request: async (id: string) => {
-        const {body} = await spotify.getAlbum(id);
-        const cover = (await getColors(body.images[0].url, {count: 5})).map((x) => x.hex());
-        return {album: body, cover};
+        const album = await fetchAlbum(`spotify:album:${id}`);
+        if (!album) throw new Error('Album not found');
+        const cover = album.coverUrl
+            ? (await getColors(album.coverUrl, {count: 5})).map((x) => x.hex())
+            : [];
+        return {album, cover};
     }
 });
 
@@ -25,19 +27,25 @@ export default function Album({id}: {id: string}) {
         if (message.isEmpty) message.request(id);
     }, [id]);
 
-    if (message.isError) throw message.error;
+    // Same lesson as Search/Home: a failed fetch must not kill the TUI.
+    if (message.isError) {
+        logger.error(message.error);
+        return (
+            <Text dim block>
+                Album failed — try again (see ~/Library/Logs/spoty-nodejs/spoty.log)
+            </Text>
+        );
+    }
     if (message.isEmpty || message.isPending) return <Spinner color="white" />;
 
-    const {album, cover} = message.data;
+    const {album, cover} = message.data as {album: AlbumInfo; cover: string[]};
     const changing = player.changing;
-    const albumArtists = new Set(album.artists.map((ii) => ii.id));
-    logger.info(cover);
     return (
         <>
             <Text background={cover[0]}> </Text>
             <Text background={cover[1]}> </Text>
             <Text bold block x={3}>
-                {album.artists.map((ii) => ii.name).join(', ')}
+                {album.artists.join(', ')}
             </Text>
 
             <Text background={cover[2]}> </Text>
@@ -46,30 +54,28 @@ export default function Album({id}: {id: string}) {
                 {album.name}
             </Text>
             <ListTable
-                data={album.tracks.items.map((item) => {
+                data={album.tracks.map((track) => {
                     return [
-                        `${item.track_number}.`,
-                        item.name,
-                        item.artists
-                            .filter((ii) => !albumArtists.has(ii.id))
-                            .map((ii) => ii.name)
-                            .join(', '),
-                        item.explicit ? '[E]' : '',
-                        timeToString(item.duration_ms)
+                        `${track.number}.`,
+                        track.name,
+                        track.artists.join(', '),
+                        track.explicit ? '[E]' : '',
+                        timeToString(track.durationMs)
                     ];
                 })}
                 onSubmit={(next: {y: number}) => {
-                    const uri = album.tracks.items[next.y].uri;
-                    logger.info(uri);
+                    const track = album.tracks[next.y];
+                    if (!track) return;
+                    logger.info(track.uri);
 
-                    PlayerStore.play(album.uri, {offset: {position: next.y}});
+                    PlayerStore.play(album.uri, {offset: {position: track.index}});
                 }}
                 renderItem={({item, y, index}: {item: string[]; y: number; index: number}) => {
                     const [number, name, features, explicit, duration] = item;
                     const details = `${explicit} ${duration}`;
-                    const id = album.tracks.items[index].id;
+                    const track = album.tracks[index];
                     return (
-                        <Text color={player.id === id ? 'green' : undefined}>
+                        <Text color={player.id === track?.id ? 'green' : undefined}>
                             <Text>{y === index ? (changing ? '~ ' : '> ') : '  '}</Text>
                             <Text dim width={number.length + 1} x={5 - number.length}>
                                 {number}

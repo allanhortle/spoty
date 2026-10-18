@@ -1,21 +1,19 @@
 import {Spinner, Text} from 'react-curse';
-import spotify from '../util/spotify.js';
+import {fetchFollowedArtists} from '../util/spclient.js';
 import Router from '../util/router.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
 import logger from '../util/logger.js';
 import List from '../components/List.js';
 
+// The old Home showed Web-API "top artists" (short/medium/long) — that data
+// isn't reachable from spclient with known operations, so Home now shows the
+// followed-artists collection instead (port doc §7).
 const useHomeData = createRequestHook({
     name: 'homeData',
     request: async () => {
-        const [short, medium, long] = await Promise.all([
-            spotify.getMyTopArtists({time_range: 'short_term'}).then((x) => x.body.items),
-            spotify.getMyTopArtists({time_range: 'medium_term'}).then((x) => x.body.items),
-            spotify.getMyTopArtists({time_range: 'long_term'}).then((x) => x.body.items)
-        ]);
-
-        return {short, medium, long};
+        const artists = await fetchFollowedArtists();
+        return {artists};
     }
 });
 
@@ -25,43 +23,26 @@ export default function Home() {
         if (message.isEmpty) message.request();
     }, []);
     if (message.isError) {
-        // api.spotify.com permanently 429s our client id; Home's port to the
-        // internal API is Phase E (see PLAN.md). Degrade gracefully instead of
-        // throwing — a dead Home view must not kill the whole TUI.
+        // A failed Home fetch must not kill the whole TUI (learned the hard
+        // way — the old getMyTopArtists 429 was fatal at boot).
         logger.error(message.error);
         return (
             <Text dim block>
-                Home is unavailable (port pending — see PLAN.md Phase E)
+                Home is unavailable (see ~/Library/Logs/spoty-nodejs/spoty.log)
             </Text>
         );
     }
     if (message.isEmpty || message.isFetching) return <Spinner color="white" />;
-    const {short, medium, long} = message.data;
-
-    const shortSet = new Set(short.map((ii) => ii.name));
-    const mediumSet = new Set(medium.map((ii) => ii.name));
-
-    const mediumItems = medium.filter((ii) => !shortSet.has(ii.name));
-    const longItems = long.filter((ii) => !shortSet.has(ii.name) && !mediumSet.has(ii.name));
-    const items = [...short, ...mediumItems, ...longItems];
+    const {artists} = message.data as {artists: {name: string; uri: string}[]};
 
     return (
         <Text>
             <Text bold height={2} block>
-                Top Artists
+                Followed Artists
             </Text>
-            <Text dim block>
-                Short
-            </Text>
-            <Text dim block y={short.length}>
-                Medium
-            </Text>
-            <Text dim block y={short.length + mediumItems.length}>
-                Long
-            </Text>
-            <Text x={8} y={2}>
+            <Text y={2}>
                 <List
-                    data={items}
+                    data={artists}
                     onChange={(next) => Router.push(next.uri)}
                     renderItem={(item) => <Text>{item.name}</Text>}
                 />
