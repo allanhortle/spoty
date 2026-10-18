@@ -573,6 +573,71 @@ export async function fetchFollowedArtists(): Promise<FollowedArtist[]> {
     return artists;
 }
 
+// ── playlist contents (port doc §6) ─────────────────────────────────
+// Plain JSON GET. `decorate=...,items` is what adds contents.items[].uri —
+// without `items` the contents list comes back empty.
+export type PlaylistInfo = {uri: string; name: string; trackUris: string[]};
+
+const playlistCache = new Map<string, PlaylistInfo>();
+
+export async function fetchPlaylist(uri: string): Promise<PlaylistInfo> {
+    const cached = playlistCache.get(uri);
+    if (cached) return cached;
+
+    const id = uri.split(':')[2] ?? '';
+    const url = `/playlist/v2/playlist/${id}?decorate=revision,attributes,length,owner,items`;
+    const response = await spFetch(url, {headers: {Accept: 'application/json'}});
+    if (!response.ok) {
+        throw new SpError(response.status, await response.text(), url);
+    }
+    const body = (await response.json()) as {
+        attributes?: {name?: string};
+        contents?: {items?: {uri?: string}[]};
+    };
+    const trackUris = (body.contents?.items ?? [])
+        .map((item) => item.uri ?? '')
+        .filter((itemUri) => itemUri.startsWith('spotify:track:'));
+
+    const info = {uri, name: body.attributes?.name ?? '', trackUris};
+    playlistCache.set(uri, info);
+    return info;
+}
+
+// Batched track names for a whole list — ONE extended-metadata POST for every
+// uri (fills the per-track cache, so later fetchTrack calls hit memory).
+export async function fetchTracks(uris: string[]): Promise<Map<string, TrackInfo>> {
+    const unique = [...new Set(uris)];
+    const missing = unique.filter((uri) => !trackCache.has(uri));
+    if (missing.length) {
+        const entries = await extendedMetadata(
+            missing.map((uri) => ({entityUri: uri, extensionKind: EXTENSION_KIND.TRACK_V4}))
+        );
+        const root = await protos;
+        const Track = root.lookupType('spotify.metadata.Track');
+        for (const uri of missing) trackCache.set(uri, null);
+        for (const entry of entries) {
+            const track = Track.decode(entry.value).toJSON() as {
+                name?: string;
+                artist?: {name?: string}[];
+                album?: {name?: string};
+                duration?: unknown;
+            };
+            trackCache.set(entry.entityUri, {
+                name: track.name ?? '',
+                artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
+                albumName: track.album?.name ?? '',
+                durationMs: num(track.duration)
+            });
+        }
+    }
+    const out = new Map<string, TrackInfo>();
+    for (const uri of unique) {
+        const info = trackCache.get(uri);
+        if (info) out.set(uri, info);
+    }
+    return out;
+}
+
 // ── playback commands (port doc §2) ─────────────────────────────
 // Any {"endpoint": <name>, ...} body can be passed to sendPlayerCommand:
 // resume/pause are plain {"endpoint": "resume"}; seek is {"endpoint": "seek_to",

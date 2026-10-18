@@ -117,6 +117,11 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
       known operations — followed artists is the closest port).
       - pty smoke: Home renders the 183-artist list; Enter drills into the
       artist view with Albums/Singles all correct.
+      - 2026-10-18 (follow-up): Home is now **three ListTable columns** again
+      (restoring the pre-port layout): On Repeat / daylist / Repeat Rewind,
+      the Made-For-You auto-playlists (port doc §9 — no top-artists endpoint
+      exists on spclient). Enter plays that playlist from the selected track.
+      (`fetchFollowedArtists` stays in `spclient.ts`, unused by Home for now.)
 - [x] **Phase F — cleanup** (2026-10-18): removed `spotify-web-api-node`,
       `@types/spotify-api`, `@types/spotify-web-api-node` deps; `spotify.ts` is
       now pairing/refresh only (no Web API client, no `SpotifyApi.*` types,
@@ -195,3 +200,10 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   endpoint on spclient; the data lives in the Made-For-You auto-playlists
   (On Repeat / Repeat Rewind / daylist), reachable via browsePage + §6
   playlist contents — a possible future Home add-on, not a port blocker.
+- 2026-10-18: Home is three ListTable columns again (like the pre-port home):
+  On Repeat / daylist / Repeat Rewind (hardcoded URIs — same for every
+  account, personalized per user). `fetchPlaylist` (§6, needs the `items`
+  decorate) + `fetchTracks` (batched TRACK_V4, one POST for all 110) feed it;
+  Enter plays that playlist from the selected track (playCommand context +
+  skip_to — Phase B envelope). pty smoke: heads + parallel rows render,
+  arrows navigate cells.

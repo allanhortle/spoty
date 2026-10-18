@@ -1,23 +1,45 @@
-import {Spinner, Text} from 'react-curse';
-import {fetchFollowedArtists} from '../util/spclient.js';
-import Router from '../util/router.js';
+import {ListTable, Spinner, Text} from 'react-curse';
+import {fetchPlaylist, fetchTracks} from '../util/spclient.js';
+import {PlayerStore, usePlayer} from './Player.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
 import logger from '../util/logger.js';
-import List from '../components/List.js';
 
-// The old Home showed Web-API "top artists" (short/medium/long) — that data
-// isn't reachable from spclient with known operations, so Home now shows the
-// followed-artists collection instead (port doc §7).
+// The old home was three columns of top artists (short/medium/long). The
+// internal API has no top-artists endpoint, so the columns are the
+// Made-For-You auto-playlists instead (port doc §9) — same URI for every
+// account, the server fills them per user:
+//   On Repeat — your most-played tracks (rolling ~30 days)
+//   daylist   — tracks themed on what you've been playing (changes daily)
+//   Repeat Rewind — the previous cycle's repeats
+const COLUMNS = [
+    {title: 'On Repeat', uri: 'spotify:playlist:37i9dQZF1EpptO20Ypcrhi'},
+    {title: 'daylist', uri: 'spotify:playlist:37i9dQZF1EP6YuccBxUcC1'},
+    {title: 'Repeat Rewind', uri: 'spotify:playlist:37i9dQZF1EpPDpKNGUYgYQ'}
+] as const;
+
 const useHomeData = createRequestHook({
     name: 'homeData',
     request: async () => {
-        const artists = await fetchFollowedArtists();
-        return {artists};
+        const playlists = await Promise.all(
+            COLUMNS.map(({title, uri}) => fetchPlaylist(uri).then((playlist) => ({title, uri, playlist})))
+        );
+        const names = await fetchTracks(playlists.flatMap((column) => column.playlist.trackUris));
+        return {
+            columns: playlists.map(({title, uri, playlist}) => ({
+                title,
+                uri,
+                tracks: playlist.trackUris.map((trackUri) => ({
+                    uri: trackUri,
+                    name: names.get(trackUri)?.name ?? ''
+                }))
+            }))
+        };
     }
 });
 
 export default function Home() {
+    const player = usePlayer();
     const message = useHomeData();
     useEffect(() => {
         if (message.isEmpty) message.request();
@@ -33,20 +55,54 @@ export default function Home() {
         );
     }
     if (message.isEmpty || message.isFetching) return <Spinner color="white" />;
-    const {artists} = message.data as {artists: {name: string; uri: string}[]};
+
+    const {columns} = message.data as {
+        columns: {title: string; uri: string; tracks: {uri: string; name: string}[]}[];
+    };
+    const rows = Math.max(0, ...columns.map((column) => column.tracks.length));
+    const data = Array.from({length: rows}, (_, y) => columns.map((column) => column.tracks[y]?.name ?? ''));
+    const head = columns.map((column) => column.title);
 
     return (
         <Text>
             <Text bold height={2} block>
-                Followed Artists
+                Home
             </Text>
-            <Text y={2}>
-                <List
-                    data={artists}
-                    onChange={(next) => Router.push(next.uri)}
-                    renderItem={(item) => <Text>{item.name}</Text>}
-                />
-            </Text>
+            <ListTable
+                head={head}
+                data={data}
+                onSubmit={(next: {x: number; y: number}) => {
+                    const column = columns[next.x];
+                    if (!column?.tracks[next.y]) return;
+                    // Play the column's playlist starting at that track.
+                    PlayerStore.play(column.uri, {offset: {position: next.y}});
+                }}
+                renderHead={({item}: {item: string[]}) =>
+                    item.map((title, key) => (
+                        <Text key={key} bold width="33.333%">
+                            {'  '}
+                            {title}
+                        </Text>
+                    ))
+                }
+                renderItem={({item, x, y, index}: {item: string[]; x: number; y: number; index: number}) =>
+                    item.map((name, key) => {
+                        const track = columns[key].tracks[index];
+                        const active = !!player.id && track?.uri === `spotify:track:${player.id}`;
+                        return (
+                            <Text
+                                key={key}
+                                width="33.333%"
+                                wrap="truncate"
+                                color={active ? 'green' : undefined}
+                            >
+                                {y === index && x === key ? '> ' : '  '}
+                                {name}
+                            </Text>
+                        );
+                    })
+                }
+            />
         </Text>
     );
 }

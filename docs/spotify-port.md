@@ -207,7 +207,14 @@ no login5 or client-token needed; confirmed live).
   live against known uris from search).
 
 ### 6. Playlist contents (validated live, 200, plain JSON)
-`GET /playlist/v2/playlist/{id}?decorate=revision,attributes,length,owner`
+`GET /playlist/v2/playlist/{id}?decorate=revision,attributes,length,owner,items`
+- **`items` is required** for the track list — without it `contents` comes back
+  with an empty `items` array (validated live 2026-10-18).
+- Response: `attributes.name`, `length`, `contents.items[].uri`
+  (+ `ownerUsername`, `isUserCreated`). `fetchPlaylist` in `spclient.ts`
+  implements this (cached).
+- Made-For-You auto-playlists (On Repeat / daylist / Repeat Rewind — §9) work
+  through this; the same URI serves every account, personalized per user.
 
 ### 7. Library / followed artists (VALIDATED LIVE, 200, 2026-10-18 — Phase E)
 `POST /collection/v2/paging/` (batch)
@@ -266,7 +273,7 @@ playlists**, all reachable with what we already have:
   - **DJ** `spotify:playlist:37i9dQZF1EYkqdzj48dyYq` (AI DJ stream)
 - Playlist contents: §6 with `decorate=revision,attributes,length,owner,items`
   → `contents.items[].uri` (+ `length`); then names via a batched TRACK_V4
-  POST (Phase D pattern).
+  POST (Phase D pattern — `fetchPlaylist`/`fetchTracks` in `spclient.ts`).
 - The genre/artist/decade/mood mix sections on the same page are
   listening-derived too, if a Home revamp ever wants more.
 - `spotify:page:home` via `browsePage` → 200 but **empty sections** (the real
