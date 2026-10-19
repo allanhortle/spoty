@@ -1,39 +1,66 @@
 import {ListTable, Spinner, Text} from 'react-curse';
-import {fetchPlaylist, fetchTracks} from '../util/spclient.js';
-import {PlayerStore, usePlayer} from './Player.js';
+import {fetchPlaylist, fetchTracks, TrackInfo} from '../util/spclient.js';
+import {usePlayer} from './Player.js';
 import {useEffect} from 'react';
 import {createRequestHook} from 'react-enty';
 import logger from '../util/logger.js';
+import Router from '../util/router.js';
 
-// The old home was three columns of top artists (short/medium/long). The
-// internal API has no top-artists endpoint, so the columns are the
-// Made-For-You auto-playlists instead (port doc §9) — same URI for every
-// account, the server fills them per user:
-//   On Repeat — your most-played tracks (rolling ~30 days)
-//   daylist   — tracks themed on what you've been playing (changes daily)
-//   Repeat Rewind — the previous cycle's repeats
-const COLUMNS = [
-    {title: 'On Repeat', uri: 'spotify:playlist:37i9dQZF1EpptO20Ypcrhi'},
-    {title: 'daylist', uri: 'spotify:playlist:37i9dQZF1EP6YuccBxUcC1'},
-    {title: 'Repeat Rewind', uri: 'spotify:playlist:37i9dQZF1EpPDpKNGUYgYQ'}
+// Home is album-focused (port doc §9 — there is no top-tracks/top-artists
+// endpoint on spclient; the Made-For-You auto-playlists are our
+// listening-derived data):
+//   Recent  — albums aggregated from On Repeat + Repeat Rewind (this cycle's
+//             and last cycle's most-played tracks), ranked by total plays.
+//   daylist — albums aggregated from the daily themed recommendation playlist
+//             (Spotify picks these from your recent listening).
+// Each track's album comes free from the batched TRACK_V4 lookup; rows are
+// albums with their main artist. Enter navigates to the album view
+// (route = album uri — same as Search/Artist).
+const RECENT_URIS = [
+    'spotify:playlist:37i9dQZF1EpptO20Ypcrhi', // On Repeat
+    'spotify:playlist:37i9dQZF1EpPDpKNGUYgYQ' // Repeat Rewind
 ] as const;
+const DAYLIST_URI = 'spotify:playlist:37i9dQZF1EP6YuccBxUcC1';
+
+type AlbumRow = {uri: string; name: string; artist: string; plays: number};
+
+// Aggregate playlist tracks into unique albums ranked by how often they
+// appear (each appearance in these auto-playlists = one repeat play).
+function aggregateAlbums(trackUris: string[], tracks: Map<string, TrackInfo>): AlbumRow[] {
+    const byUri = new Map<string, AlbumRow>();
+    for (const trackUri of trackUris) {
+        const track = tracks.get(trackUri);
+        if (!track?.albumUri || !track.albumName) continue;
+        const existing = byUri.get(track.albumUri);
+        if (existing) {
+            existing.plays++;
+            continue;
+        }
+        byUri.set(track.albumUri, {
+            uri: track.albumUri,
+            name: track.albumName,
+            artist: track.artists[0] ?? '',
+            plays: 1
+        });
+    }
+    return [...byUri.values()].sort((a, b) => b.plays - a.plays);
+}
 
 const useHomeData = createRequestHook({
     name: 'homeData',
     request: async () => {
-        const playlists = await Promise.all(
-            COLUMNS.map(({title, uri}) => fetchPlaylist(uri).then((playlist) => ({title, uri, playlist})))
-        );
-        const names = await fetchTracks(playlists.flatMap((column) => column.playlist.trackUris));
+        const [recent, daylist] = await Promise.all([
+            Promise.all(RECENT_URIS.map((uri) => fetchPlaylist(uri))),
+            fetchPlaylist(DAYLIST_URI)
+        ]);
+        const recentTrackUris = recent.flatMap((playlist) => playlist.trackUris);
+        // One batched TRACK_V4 POST fills every name + album/artist uri.
+        const tracks = await fetchTracks([...recentTrackUris, ...daylist.trackUris]);
         return {
-            columns: playlists.map(({title, uri, playlist}) => ({
-                title,
-                uri,
-                tracks: playlist.trackUris.map((trackUri) => ({
-                    uri: trackUri,
-                    name: names.get(trackUri)?.name ?? ''
-                }))
-            }))
+            columns: [
+                {title: 'Recent', albums: aggregateAlbums(recentTrackUris, tracks)},
+                {title: 'daylist', albums: aggregateAlbums(daylist.trackUris, tracks)}
+            ]
         };
     }
 });
@@ -56,11 +83,11 @@ export default function Home() {
     }
     if (message.isEmpty || message.isFetching) return <Spinner color="white" />;
 
-    const {columns} = message.data as {
-        columns: {title: string; uri: string; tracks: {uri: string; name: string}[]}[];
-    };
-    const rows = Math.max(0, ...columns.map((column) => column.tracks.length));
-    const data = Array.from({length: rows}, (_, y) => columns.map((column) => column.tracks[y]?.name ?? ''));
+    const {columns} = message.data as {columns: {title: string; albums: AlbumRow[]}[]};
+    const rows = Math.max(0, ...columns.map((column) => column.albums.length));
+    const data = Array.from({length: rows}, (_, y) =>
+        columns.map((column) => column.albums[y]?.name ?? '')
+    );
     const head = columns.map((column) => column.title);
 
     return (
@@ -72,32 +99,31 @@ export default function Home() {
                 head={head}
                 data={data}
                 onSubmit={(next: {x: number; y: number}) => {
-                    const column = columns[next.x];
-                    if (!column?.tracks[next.y]) return;
-                    // Play the column's playlist starting at that track.
-                    PlayerStore.play(column.uri, {offset: {position: next.y}});
+                    const album = columns[next.x]?.albums[next.y];
+                    if (album) Router.push(album.uri);
                 }}
                 renderHead={({item}: {item: string[]}) =>
                     item.map((title, key) => (
-                        <Text key={key} bold width="33.333%">
+                        <Text key={key} bold width="50%">
                             {'  '}
                             {title}
                         </Text>
                     ))
                 }
                 renderItem={({item, x, y, index}: {item: string[]; x: number; y: number; index: number}) =>
-                    item.map((name, key) => {
-                        const track = columns[key].tracks[index];
-                        const active = !!player.id && track?.uri === `spotify:track:${player.id}`;
+                    item.map((_, key) => {
+                        const album = columns[key].albums[index];
+                        if (!album) return <Text key={key} width="50%" />;
+                        const active = player.albumUri === album.uri;
                         return (
                             <Text
                                 key={key}
-                                width="33.333%"
+                                width="50%"
                                 wrap="truncate"
                                 color={active ? 'green' : undefined}
                             >
                                 {y === index && x === key ? '> ' : '  '}
-                                {name}
+                                {album.name} — {album.artist}
                             </Text>
                         );
                     })

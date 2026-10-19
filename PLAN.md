@@ -207,3 +207,17 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   Enter plays that playlist from the selected track (playCommand context +
   skip_to — Phase B envelope). pty smoke: heads + parallel rows render,
   arrows navigate cells.
+- 2026-10-19: Home is **album-focused**, two columns: `Recent` = albums
+  aggregated from On Repeat + Repeat Rewind tracks, ranked by total
+  appearances; `daylist` = albums from the daily recommendation playlist.
+  `TrackInfo` now carries `albumUri`/`artistUris` (base62 from the TRACK_V4
+  album/artist gids — got them for free from the existing batch decode, no
+  extra requests). Row = `Album — main artist`; active row greens when
+  `PlayerStore.albumUri` matches. Enter **navigates** to the album view
+  (route = album uri, same as Search/Artist) instead of playing.
+  Validated live: 30+30+50 tracks → 108 unique in one batched POST,
+  aggregation + ranking correct (top: Sunshine — Jungle ×8); TUI confirmed
+  working by the user. Note: my scripted pty smokes went flaky in the
+  environment this session (spawn renders nothing, no log lines, even for
+  the pre-change build) — direct `node` data tests still work; human-verify
+  TUI changes if that recurs.

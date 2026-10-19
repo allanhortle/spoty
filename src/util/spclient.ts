@@ -201,9 +201,37 @@ export async function fetchCluster(): Promise<ClusterInfo> {
 // exposes type_url/value in snake_case even on camelCase-decoded messages.
 const COUNTRY = 'AU'; // static for now — port doc open question 3
 
-export type TrackInfo = {name: string; artists: string[]; albumName: string; durationMs: number};
+export type TrackInfo = {
+    name: string;
+    artists: string[];
+    albumName: string;
+    albumUri: string; // spotify:album:<id> — from Track.album.gid
+    artistUris: string[]; // spotify:artist:<id>[] — from Track.artist[].gid
+    durationMs: number
+};
 
 const trackCache = new Map<string, TrackInfo | null>();
+
+// TRACK_V4 toJSON → TrackInfo (shared by fetchTrack and fetchTracks).
+// toJSON keeps album/artist gids base64 — convert them to base62 uris so
+// consumers (e.g. album-focused Home) get playable entity uris for free.
+function trackInfoFromJson(track: {
+    name?: string;
+    artist?: {gid?: string; name?: string}[];
+    album?: {gid?: string; name?: string};
+    duration?: unknown;
+}): TrackInfo {
+    return {
+        name: track.name ?? '',
+        artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
+        albumName: track.album?.name ?? '',
+        albumUri: track.album?.gid ? `spotify:album:${gidToId(track.album.gid)}` : '',
+        artistUris: (track.artist ?? [])
+            .filter((artist) => artist.gid)
+            .map((artist) => `spotify:artist:${gidToId(artist.gid as string)}`),
+        durationMs: num(track.duration)
+    };
+}
 
 // One POST, any number of entity requests — the endpoint is batch by design
 // (port doc §5). Each entry: {entityUri, extensionKind}.
@@ -263,18 +291,7 @@ export async function fetchTrack(uri: string): Promise<TrackInfo | null> {
         trackCache.set(uri, null);
         return null;
     }
-    const track = Track.decode(entry.value).toJSON() as {
-        name?: string;
-        artist?: {name?: string}[];
-        album?: {name?: string};
-        duration?: unknown;
-    };
-    const info: TrackInfo = {
-        name: track.name ?? '',
-        artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
-        albumName: track.album?.name ?? '',
-        durationMs: num(track.duration)
-    };
+    const info = trackInfoFromJson(Track.decode(entry.value).toJSON());
     trackCache.set(uri, info);
     return info;
 }
@@ -616,18 +633,10 @@ export async function fetchTracks(uris: string[]): Promise<Map<string, TrackInfo
         const Track = root.lookupType('spotify.metadata.Track');
         for (const uri of missing) trackCache.set(uri, null);
         for (const entry of entries) {
-            const track = Track.decode(entry.value).toJSON() as {
-                name?: string;
-                artist?: {name?: string}[];
-                album?: {name?: string};
-                duration?: unknown;
-            };
-            trackCache.set(entry.entityUri, {
-                name: track.name ?? '',
-                artists: (track.artist ?? []).map((artist) => artist.name ?? '').filter(Boolean),
-                albumName: track.album?.name ?? '',
-                durationMs: num(track.duration)
-            });
+            trackCache.set(
+                entry.entityUri,
+                trackInfoFromJson(Track.decode(entry.value).toJSON())
+            );
         }
     }
     const out = new Map<string, TrackInfo>();
