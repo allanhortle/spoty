@@ -12,7 +12,8 @@
   "type": "module",
   "scripts": {
     "build": "yarn tsc",
-    "watch": "yarn tsc --watch"
+    "watch": "yarn tsc --watch",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "conf": "^12.0.0",
@@ -22,7 +23,7 @@
     "make-dir": "^3.1.0",
     "open": "^10.0.3",
     "protobufjs": "^8.8.1",
-    "react-curse": "^1.0.13",
+    "react-curse": "^1.0.23",
     "react-dom": "^18.2.0",
     "react-enty": "^2.0.0",
     "react-reconciler": "^0.29.0",
@@ -35,6 +36,7 @@
     "@types/lodash": "^4.14.188",
     "@types/node": "^24.0.0",
     "@types/react": "^18.0.24",
+    "patch-package": "^8.0.1",
     "prettier": "^2.7.1",
     "typescript": "^5.3.3"
   }

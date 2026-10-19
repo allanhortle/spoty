@@ -142,13 +142,27 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
    `search.rs` when all hashes 412.
 
 ## Hard-won testing notes (don't rediscover these)
+- **Use `script`, not `expect`, for app-level pty smokes** (validated
+  2026-10-19): `expect`'s pty only flushes spawned output when the process
+  EXITS, and — worse — under `expect` the app's react-enty request resolves
+  (`home-request-done` in the log) but the hook never re-renders (spinner
+  forever), even though everything works in a real terminal. The recipe that
+  works, with piped stdin for keystrokes (one char per printf, ≥1s apart):
+  `{ sleep 20; printf '/'; sleep 2; printf '\r'; sleep 2; printf 'q'; } | \
+    script -q /tmp/out sh -c "stty rows 30 cols 120; exec node build/index.js"`
+  then decode /tmp/out (it holds ESC[?1049h + ANSI). A python reconstructor
+  of the byte stream (H/C/D/G moves) gives the final screen to assert on.
+  Keys: `q` pops a route; `q` on home exits (clean output flush); in Search
+  the input has focus — Enter releases it before global keys work.
 - react-curse renders **nothing at terminal size 0×0** — pty tests must set the
   window size before spawn; no-TTY pipes crash in its screen buffer.
+  (`script` alone gives 0×0 too — set the size via the inner `sh -c stty`
+  trick above; `expect`'s `exec stty < $spawn_out(slave,name)` breaks spawn
+  output entirely.)
 - react-curse `Input` **drops all but the first char of a multi-char stdin
   chunk** (queue-drained chunks carry no `raw` and Input's handler bails on
-  `raw === undefined`) — pty tests must send **one keystroke per write**
-  (`foreach c [split $s ""] { send -- $c; after 60 }`), not whole strings.
-  Human typing (one key per data event) is unaffected.
+  `raw === undefined`) — pty tests must send **one keystroke per write**,
+  not whole strings. Human typing (one key per data event) is unaffected.
 - `api.spotify.com` 429 for our client is **permanent, not volume-based**.
 - Access token ~1h → `refreshTokens()` before any API work.
 - Log first when debugging: `~/Library/Logs/spoty-nodejs/spoty.log`.
@@ -220,4 +234,49 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   working by the user. Note: my scripted pty smokes went flaky in the
   environment this session (spawn renders nothing, no log lines, even for
   the pre-change build) — direct `node` data tests still work; human-verify
-  TUI changes if that recurs.
+  TUI changes if that recurs. (Superseded 2026-10-19: the flakiness was
+  `expect`-specific — see hard-won testing notes; `script` smokes work.)
+- 2026-10-19: **Japanese/CJK text ghosted across navigation** — react-curse's
+  screen buffer is one cell per JS character, but CJK glyphs are 2 terminal
+  columns wide, so after any CJK chunk the renderer's cursor model drifts
+  from the physical cursor and diff updates write into the wrong columns
+  (stale text persists across route changes). **No react-curse version
+  handles this** (checked through 1.0.23 — `str.length` cursor math, no
+  wcwidth anywhere). Fixed with `patches/react-curse+1.0.23.patch`
+  (applied by `patch-package` via the `postinstall` script): buffer cells are
+  physical columns now — `Screen.put` writes wide glyphs as char +
+  `["", modifiers]` continuation cell (zero-width chars ride along with the
+  previous cell), `Term.render` skips `""` cells when emitting and advances
+  its cursor by cell span. Validated: isolated diff-update test (CJK prefix
+  + changed latin tail → `ESC[1;10H` absolute positioning, `world` exactly
+  over `hello`) and full app home→search→home under `script` pty (final
+  screen pixel-perfect, エアにに row aligned with neighbors, no ghosts).
+  **Second round same day — the span advance was still buggy and the user
+  still saw corruption (ghost つ injected into `エアにに` + displaced
+  fragments, then "locked" — the diff never repairs what the model thinks
+  is unchanged).** Root cause: the span counted the chunk's covered cells
+  (last cell + 1), but when a wide char's BASE cell changes while its
+  CONTINUATION cell is unchanged (prev frame had a different wide char in
+  the same spot), the chunk holds the base without the continuation and
+  undercounts the physical advance by 1 per such wide char. Reproduced via
+  Home → Enter into the エアにに album (CJK tracks) → play → q → Home: the
+  home diff against the album view's CJK track row split the CJK run
+  (`エアに` chunk span 9 vs physical 10; next `に` intended x=10, landed 11).
+  **Fix: span = chunk start + SUM OF DISPLAY WIDTHS** (`charWidth(char)`
+  per base cell, 0 for `""` continuations) — `
+  chunks[chunksAt][2] = (chunks[chunksAt][2] ?? x) + (char === "" ? 0 : charWidth(char))`.
+  Diagnosis technique (reusable): instrument `Term.render` to log every
+  chunk (intended x/y/str) + the buffer per frame to a file, replay the pty
+  byte stream with a WIDTH-AWARE terminal simulator (a 1-col/char
+  simulator gives false positives AND false negatives — burned an hour on
+  that), then find the first chunk whose landing ≠ intended. Both flows
+  re-validated byte-identical to the model, zero ghost cells.
+- 2026-10-19: react-curse upgraded 1.0.13 → 1.0.23 (last is 2025-10-16,
+  public `.d.ts` identical). It requires react ^19 + react-reconciler ^0.32
+  (bundled) — `react` is a transitive dep for us (src only imports `react`),
+  so the lock moved react 18.2 → 19.3.1; `src` never imports
+  `react-dom`/`react-reconciler` directly and `yarn tsc` is clean. Verified
+  under React 19: react-enty `createRequestHook` (isolated pty test), valtio
+  player polling, and the full app smoke. The `@types/react@18` / unused
+  `react-dom@18` leftovers in package.json are harmless (tsc clean) —
+  tidy up if ever bored.

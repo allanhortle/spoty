@@ -34,8 +34,14 @@ node build/index.js # run it (fnm picks Node 24 via .node-version)
 ```
 
 - No test suite exists yet; smoke-test by running under a **pty with a real
-  window size** (react-curse renders nothing at 0×0 — see port doc testing notes).
+  window size** (react-curse renders nothing at 0×0). Use the `script` +
+  inner-`stty` recipe in PLAN.md's hard-won testing notes — `expect`-based
+  ptys are unreliable for this app (details there).
 - Spotify desktop must be running for playback tests.
+- `node_modules/react-curse` carries a **local patch** (CJK double-width
+  cell handling) from `patches/` — `yarn install` re-applies it via the
+  `postinstall` script (patch-package). Don't edit react-curse by hand;
+  regenerate the patch (`yarn patch-package react-curse`) if it must change.
 
 ## Runtime locations
 
