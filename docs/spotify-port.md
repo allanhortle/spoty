@@ -279,6 +279,45 @@ playlists**, all reachable with what we already have:
 - `spotify:page:home` via `browsePage` → 200 but **empty sections** (the real
   home page uses a different/unknown operation).
 
+### 10. Your Library — playlists / followed artists / saved albums (VALIDATED LIVE, 200, 2026-10-19)
+The web player's `libraryV3` pathfinder query serves all three library tabs.
+The collection/v2/paging sets do NOT (§7: `playlist*`/`collection*`/`owned*`
+sets all 403 with our scopes — probed 2026-10-19, don't re-probe).
+- URL/headers: pathfinder as in §4 (api-partner, pathfinder/v2/query).
+- Hash: `libraryV3` →
+  `390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455`
+  (extracted from the web player bundle — see below for how to re-extract
+  when it rotates).
+- Variables (validated live):
+  `{filters: ["Playlists"|"Artists"|"Albums"], order: null, textFilter: null,
+  features: [], limit: 50, offset: 0, flatten: false, expandedFolders: [],
+  folderUri: null, includeFoldersWhenFlattening: true}`.
+  **filters are CAPITALIZED ids** from the answer's `availableFilters`
+  (Playlists/Artists/Albums); lowercase → `LibraryInvalidFilterIdError`.
+  `order: null` = Recents; `order: "CUSTOM"` → `LibraryInvalidSortOrderIdError`
+  — valid sort order ids come back in `availableSortOrders` (Recents,
+  "Recently Added", Alphabetical, Creator).
+- Answer: `data.me.libraryV3 = {__typename: "LibraryPage", totalCount,
+  pagingInfo: {limit, offset}, items[]: {addedAt: {isoString},
+  item: {_uri, data}}}` (note the extra `.item` wrapper level).
+  Per type `data` shapes (validated live):
+  - Playlist: `{name, ownerV2, description, images, ...}`
+  - Artist: `{profile: {name}, visuals, ...}`
+  - Album: `{name, artists: {items: [{profile: {name}, uri}]},
+    date: {isoString, precision}, type, coverArt, ...}`
+- Counts live: 34 playlists / 391 artists (8 pages of 50) / 2 albums.
+  391 artists vs 183 from collection/v2/paging `set: 'artist'` — libraryV3
+  counts every artist shown in the client's library tab.
+- Implemented: `fetchLibrary(filter)` in `src/util/pathfinder.ts` (paginates
+  until short page / totalCount); views `Library.tsx` (tabs, key `b`, route
+  `library`) + `Playlist.tsx` (route `spotify:playlist:<id>`, contents via
+  §6 + one batched TRACK_V4 POST, Enter = playCommand context + skip_to).
+- **Hash extraction recipe** (when libraryV3 rotates 412): fetch
+  `https://open.spotify.com/` (desktop UA) → the `web-player.<hash>.js`
+  script URL → grep `\.l\("([A-Za-z0-9_]+)","query","([0-9a-f]{64})"\)` —
+  62 named queries incl. `libraryV3`, `editablePlaylists`, `fetchPlaylist`,
+  `fetchLibraryTracks`.
+
 ## Vendored protobufs (`proto/`, loads via `protobufjs` — verified)
 
 `connect.proto, player.proto, devices.proto, media.proto, metadata.proto,

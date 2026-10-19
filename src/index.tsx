@@ -6,6 +6,8 @@ import Player, {PlayerStore} from './view/Player.js';
 import Search from './view/Search.js';
 import Artist from './view/Artist.js';
 import Album from './view/Album.js';
+import Playlist from './view/Playlist.js';
+import Library from './view/Library.js';
 import Devices from './view/Devices.js';
 import Home from './view/Home.js';
 import Help from './view/Help.js';
@@ -28,6 +30,7 @@ function Routes() {
             if (focus) return;
             if (input === '/') Router.push('search');
             if (input === 'd') Router.push('devices');
+            if (input === 'b') Router.push('library');
             if (input === '?') Router.push('help');
             if (input === 'h') Router.push('home');
             if (input === ' ') PlayerStore.playPause();
@@ -49,7 +52,10 @@ function Routes() {
                     logger.info(route);
                     if (route === 'search') return <Search />;
                     if (route === 'devices') return <Devices />;
+                    if (route === 'library') return <Library />;
                     if (route === 'help') return <Help />;
+                    if (route.startsWith('spotify:playlist'))
+                        return <Playlist id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:album'))
                         return <Album id={route.split(':')[2]} />;
                     if (route.startsWith('spotify:artist'))

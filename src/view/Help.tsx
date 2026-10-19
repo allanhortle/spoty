@@ -9,6 +9,7 @@ export default function Help() {
             <HelpRow hotkey="n">Now Playing</HelpRow>
             <HelpRow hotkey="?">Help</HelpRow>
             <HelpRow hotkey="/">Search</HelpRow>
+            <HelpRow hotkey="b">Library</HelpRow>
             <HelpRow hotkey="d">Devices</HelpRow>
             <HelpRow hotkey="q">Go back</HelpRow>
 

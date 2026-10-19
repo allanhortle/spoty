@@ -280,3 +280,14 @@ names, and persisted query hashes: **`docs/spotify-port.md`**.
   player polling, and the full app smoke. The `@types/react@18` / unused
   `react-dom@18` leftovers in package.json are harmless (tsc clean) —
   tidy up if ever bored.
+- 2026-10-19: **Library browsing** (validated live + pty smoke): key `b` →
+  `Library.tsx` (route `library`, tabs Playlists/Artists/Albums via `\t`,
+  Enter drills in — artists/albums reuse their views, playlists open the new
+  `Playlist.tsx` route `spotify:playlist:<id>`: §6 contents + one batched
+  TRACK_V4 POST, Enter = playCommand from the selected track, validated live
+  by actually starting playback of a playlist track). Data: the web player's
+  `libraryV3` pathfinder query — full spec + the collection/v2/paging
+  playlist-set dead ends + hash-re-extraction recipe in port doc §10
+  (key `b` not `l` to avoid ListTable's vi `h`/`l` column-nav conflict).
+  `fetchLibrary` in `pathfinder.ts` paginates to totalCount (391 artists in
+  8 pages). Help updated. Later-cleanup candidates noted in §10.

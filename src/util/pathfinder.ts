@@ -1,10 +1,11 @@
 import {fetchUrl} from './spclient.js';
 
-// Pathfinder (api-partner) — the GraphQL-ish search endpoint. Queries are
-// "persisted": Spotify serves them by sha256 hash and rotates the hashes
-// every few months, so every operation carries a list of known hashes and
-// we rotate on HTTP 412 (a retired hash). When ALL hashes 412, refresh the
-// table from spotatui's search.rs (port doc §4).
+// Pathfinder (api-partner) — the GraphQL-ish endpoint (search + library).
+// Queries are "persisted": Spotify serves them by sha256 hash and rotates
+// the hashes every few months, so every operation carries a list of known
+// hashes and we rotate on HTTP 412 (a retired hash). When ALL hashes 412,
+// refresh the table from spotatui's search.rs (search, port doc §4) or the
+// web player bundle (libraryV3, port doc §10).
 
 const PATHFINDER_URL = 'https://api-partner.spotify.com/pathfinder/v2/query';
 
@@ -35,6 +36,11 @@ const HASHES = {
     searchPlaylists: [
         'd520014e748f9ea44f7707d8df1819867ac1205e8b7f3e28f22fe5fc858921b1'
     ],
+    libraryV3: [
+        // web player "Your Library" query (extracted from the web player
+        // bundle — open.spotifycdn.com web-player.<hash>.js, port doc §10)
+        '390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455'
+    ],
     searchPodcasts: [
         '0195d9f61b43606d490bca64c3456e3593528cea6cc05c7e822c7c42beed0f4e'
     ]
@@ -49,6 +55,7 @@ const hashIndex: Record<Operation, number> = {
     searchArtists: 0,
     searchAlbums: 0,
     searchPlaylists: 0,
+    libraryV3: 0,
     searchPodcasts: 0
 };
 
@@ -56,6 +63,9 @@ export type PathfinderResponse = {
     data?: {
         searchV2?: {
             [field: string]: {items?: unknown[]} | undefined;
+        };
+        me?: {
+            libraryV3?: unknown;
         };
     };
     errors?: {message?: string}[];
@@ -150,4 +160,85 @@ export async function searchAlbums(term: string, limit = 20): Promise<SearchResu
             .filter(Boolean)
             .join(', ')
     }));
+}
+
+// ── library: the user's saved playlists / followed artists / saved albums ──
+// libraryV3 (validated live 2026-10-19, port doc §10): the web player's
+// "Your Library" query. The collection/v2/paging sets only cover 'artist' —
+// playlist/album sets 403 with our scopes; this pathfinder query serves all
+// three tabs with names inline (no extra metadata requests needed).
+// `filters` must be one of the CAPITALIZED ids from the answer's
+// `availableFilters` ("Playlists" | "Artists" | "Albums") — lowercase values
+// answer LibraryInvalidFilterIdError; `order: null` = Recents (default).
+export type LibraryFilter = 'Playlists' | 'Artists' | 'Albums';
+
+export type LibraryItem = {
+    name: string;
+    uri: string;
+    artist?: string; // albums only (main artist names)
+    addedAt: string; // ISO
+};
+
+type LibraryPage = {
+    __typename?: string;
+    totalCount?: number;
+    pagingInfo?: {limit?: number; offset?: number};
+    items?: {
+        addedAt?: {isoString?: string};
+        item?: {_uri?: string; data?: Record<string, unknown>};
+    }[];
+};
+
+export async function fetchLibrary(filter: LibraryFilter): Promise<LibraryItem[]> {
+    const limit = 50;
+    const items: LibraryItem[] = [];
+    for (let offset = 0; ; offset += limit) {
+        const body = await pathfinderQuery('libraryV3', {
+            filters: [filter],
+            order: null,
+            textFilter: null,
+            features: [],
+            limit,
+            offset,
+            flatten: false,
+            expandedFolders: [],
+            folderUri: null,
+            includeFoldersWhenFlattening: true
+        });
+        const page = body.data?.me?.libraryV3 as LibraryPage | undefined;
+        if (!page || page.__typename !== 'LibraryPage') {
+            throw new Error(
+                `libraryV3 ${filter} failed: ${page?.__typename ?? 'no libraryV3 in answer'}`
+            );
+        }
+        const mapped = (page.items ?? [])
+            .map((entry): LibraryItem | null => {
+                const item = entry.item ?? {};
+                const data = item.data ?? {};
+                // Per type (validated live): Playlist {name, ownerV2},
+                // Artist {profile: {name}}, Album {name, artists: {items: [{profile: {name}}]}}.
+                const profile = data.profile as {name?: string} | undefined;
+                const artists =
+                    (data.artists as {items?: {profile?: {name?: string}}[]} | undefined)
+                        ?.items ?? [];
+                const name = String(profile?.name ?? data.name ?? '');
+                const uri = String(item._uri ?? '');
+                if (!name || !uri) return null;
+                return {
+                    name,
+                    uri,
+                    artist: artists.length
+                        ? artists
+                              .map((artist) => artist.profile?.name ?? '')
+                              .filter(Boolean)
+                              .join(', ')
+                        : undefined,
+                    addedAt: String(entry.addedAt?.isoString ?? '')
+                };
+            })
+            .filter((item): item is LibraryItem => !!item);
+        items.push(...mapped);
+        if (mapped.length < limit || items.length >= (page.totalCount ?? 0)) break;
+    }
+    return items;
 }
